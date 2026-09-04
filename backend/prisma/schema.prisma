@@ -1,0 +1,686 @@
+// Modelo de datos de Innovasoft Helpdesk.
+// Los nombres de tabla en snake_case corresponden a las entidades descritas en la
+// propuesta aprobada (docs/COMPROMISOS.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Desde Prisma 7 la cadena de conexión no vive en el esquema: las migraciones la
+// leen de prisma.config.ts y el cliente la recibe a través de un adaptador.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identidad, perfiles y permisos
+// ---------------------------------------------------------------------------
+
+enum AmbitoPerfil {
+  INNOVASOFT
+  EMPRESA
+}
+
+model Empresa {
+  id          String   @id @default(uuid())
+  nit         String   @unique
+  razonSocial String   @map("razon_social")
+  direccion   String?
+  telefono    String?
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  usuarios     Usuario[]
+  suscripciones Suscripcion[]
+  bolsas       BolsaPuntos[]
+  movimientos  MovimientoPuntos[]
+  periodos     PeriodoFacturacion[]
+  tickets      Ticket[]
+  citas        Cita[]
+  fidelidad    MovimientoFidelidad[]
+  canjes       Canje[]
+
+  @@map("empresa_cliente")
+}
+
+model Perfil {
+  id          String       @id @default(uuid())
+  nombre      String       @unique
+  descripcion String
+  ambito      AmbitoPerfil
+  // Los cinco perfiles iniciales no se pueden eliminar desde la interfaz.
+  esSistema   Boolean      @default(false) @map("es_sistema")
+
+  usuarios Usuario[]
+  permisos PerfilPermiso[]
+
+  @@map("perfil")
+}
+
+model Permiso {
+  id          String @id @default(uuid())
+  // Clave con la forma "modulo.accion", por ejemplo "tickets.cerrar".
+  clave       String @unique
+  modulo      String
+  accion      String
+  descripcion String
+
+  perfiles PerfilPermiso[]
+
+  @@index([modulo])
+  @@map("permiso")
+}
+
+model PerfilPermiso {
+  perfilId  String @map("perfil_id")
+  permisoId String @map("permiso_id")
+
+  perfil  Perfil  @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  permiso Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+
+  @@id([perfilId, permisoId])
+  @@map("perfil_permiso")
+}
+
+model Usuario {
+  id              String   @id @default(uuid())
+  // Nulo cuando el usuario es personal de Innovasoft; con valor cuando pertenece
+  // a una empresa cliente. De este campo depende el aislamiento entre empresas.
+  empresaId       String?  @map("empresa_id")
+  perfilId        String   @map("perfil_id")
+  nombres         String
+  apellidos       String
+  email           String   @unique
+  passwordHash    String   @map("password_hash")
+  emailVerificado Boolean  @default(false) @map("email_verificado")
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  empresa Empresa? @relation(fields: [empresaId], references: [id])
+  perfil  Perfil   @relation(fields: [perfilId], references: [id])
+
+  asesor            Asesor?
+  tokens            TokenUsuario[]
+  sesiones          SesionRefresh[]
+  auditoria         RegistroAuditoria[]
+  ticketsSolicitados Ticket[]            @relation("SolicitanteTicket")
+  citasSolicitadas   Cita[]              @relation("SolicitanteCita")
+  historialTickets   TicketHistorial[]
+  adjuntosSubidos    Adjunto[]
+  movimientosRegistrados MovimientoPuntos[]
+  canjesRealizados   Canje[]
+
+  @@index([empresaId])
+  @@map("usuario")
+}
+
+model Asesor {
+  id          String  @id @default(uuid())
+  usuarioId   String  @unique @map("usuario_id")
+  especialidad String?
+  activo      Boolean @default(true)
+
+  usuario        Usuario                @relation(fields: [usuarioId], references: [id])
+  tickets        Ticket[]
+  actividades    TicketActividad[]
+  citas          Cita[]
+  disponibilidad DisponibilidadAsesor[]
+
+  @@map("asesor")
+}
+
+enum TipoToken {
+  VERIFICACION_EMAIL
+  RECUPERACION_PASSWORD
+}
+
+model TokenUsuario {
+  id        String    @id @default(uuid())
+  usuarioId String    @map("usuario_id")
+  // Se guarda el hash, no el token: si alguien lee la tabla no puede usarlo.
+  tokenHash String    @unique @map("token_hash")
+  tipo      TipoToken
+  expiraEn  DateTime  @map("expira_en")
+  usadoEn   DateTime? @map("usado_en")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, tipo])
+  @@map("token_usuario")
+}
+
+model SesionRefresh {
+  id            String    @id @default(uuid())
+  usuarioId     String    @map("usuario_id")
+  tokenHash     String    @unique @map("token_hash")
+  expiraEn      DateTime  @map("expira_en")
+  revocadoEn    DateTime? @map("revocado_en")
+  // Al rotar el refresh token se encadena con el nuevo: si aparece un token ya
+  // reemplazado, es señal de robo y se revoca toda la cadena.
+  reemplazadoPor String?  @map("reemplazado_por")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("sesion_refresh")
+}
+
+model RegistroAuditoria {
+  id             String   @id @default(uuid())
+  usuarioId      String?  @map("usuario_id")
+  entidad        String
+  entidadId      String   @map("entidad_id")
+  accion         String
+  datosAnteriores Json?   @map("datos_anteriores")
+  datosNuevos    Json?    @map("datos_nuevos")
+  ip             String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([entidad, entidadId])
+  @@index([createdAt])
+  @@map("registro_auditoria")
+}
+
+// ---------------------------------------------------------------------------
+// F2 — Planes, bolsas de puntos y movimientos
+// ---------------------------------------------------------------------------
+
+enum TipoPlan {
+  SUSCRIPCION
+  RECARGA
+  BONO
+}
+
+model Plan {
+  id              String   @id @default(uuid())
+  clave           String   @unique
+  nombre          String
+  descripcion     String
+  tipo            TipoPlan
+  // Nulo en el plan Ilimitado, que no acota la cantidad de puntos.
+  puntosIncluidos Int?     @map("puntos_incluidos")
+  esIlimitado     Boolean  @default(false) @map("es_ilimitado")
+  diasVigencia    Int      @map("dias_vigencia")
+  precio          Decimal  @db.Decimal(12, 2)
+  activo          Boolean  @default(true)
+
+  suscripciones Suscripcion[]
+
+  @@map("plan")
+}
+
+model TarifaServicio {
+  id     String  @id @default(uuid())
+  clave  String  @unique
+  nombre String
+  puntos Int
+  activo Boolean @default(true)
+
+  tickets     Ticket[]
+  citas       Cita[]
+  modalidades Modalidad[]
+
+  @@map("tarifa_servicio")
+}
+
+enum EstadoSuscripcion {
+  ACTIVA
+  VENCIDA
+  CANCELADA
+}
+
+model Suscripcion {
+  id        String            @id @default(uuid())
+  empresaId String            @map("empresa_id")
+  planId    String            @map("plan_id")
+  inicioEn  DateTime          @map("inicio_en")
+  finEn     DateTime          @map("fin_en")
+  estado    EstadoSuscripcion @default(ACTIVA)
+  precioPagado Decimal        @map("precio_pagado") @db.Decimal(12, 2)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  empresa  Empresa               @relation(fields: [empresaId], references: [id])
+  plan     Plan                  @relation(fields: [planId], references: [id])
+  bolsas   BolsaPuntos[]
+  fidelidad MovimientoFidelidad[]
+  canjesAplicados Canje[]
+
+  @@index([empresaId, estado])
+  @@map("suscripcion")
+}
+
+enum OrigenBolsa {
+  PLAN
+  RECARGA
+  BONO
+  PROMOCION
+}
+
+model BolsaPuntos {
+  id              String      @id @default(uuid())
+  empresaId       String      @map("empresa_id")
+  suscripcionId   String?     @map("suscripcion_id")
+  origen          OrigenBolsa
+  puntosIniciales Int         @map("puntos_iniciales")
+  esIlimitada     Boolean     @default(false) @map("es_ilimitada")
+  emitidaEn       DateTime    @default(now()) @map("emitida_en")
+  venceEn         DateTime    @map("vence_en")
+  anulada         Boolean     @default(false)
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  suscripcion Suscripcion?       @relation(fields: [suscripcionId], references: [id])
+  movimientos MovimientoPuntos[]
+  canjeOrigen Canje?
+
+  // El motor de consumo recorre las bolsas de una empresa ordenadas por
+  // vencimiento más próximo; este índice es el que sostiene esa consulta.
+  @@index([empresaId, venceEn])
+  @@map("bolsa_puntos")
+}
+
+enum TipoMovimientoPuntos {
+  EMISION
+  CONSUMO
+  EXPIRACION
+  DESCUBIERTO
+  AJUSTE
+}
+
+model MovimientoPuntos {
+  id          String               @id @default(uuid())
+  empresaId   String               @map("empresa_id")
+  // Nulo en los movimientos de descubierto, que por definición no salen de
+  // ninguna bolsa.
+  bolsaId     String?              @map("bolsa_id")
+  tipo        TipoMovimientoPuntos
+  // Positivo cuando entra saldo, negativo cuando sale. El saldo disponible es
+  // la suma de estos valores sobre las bolsas vigentes: no se almacena aparte.
+  puntos      Int
+  ticketId    String?              @map("ticket_id")
+  citaId      String?              @map("cita_id")
+  periodoId   String?              @map("periodo_id")
+  descripcion String
+  registradoPorId String?          @map("registrado_por_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  empresa       Empresa             @relation(fields: [empresaId], references: [id])
+  bolsa         BolsaPuntos?        @relation(fields: [bolsaId], references: [id])
+  ticket        Ticket?             @relation(fields: [ticketId], references: [id])
+  cita          Cita?               @relation(fields: [citaId], references: [id])
+  periodo       PeriodoFacturacion? @relation(fields: [periodoId], references: [id])
+  registradoPor Usuario?            @relation(fields: [registradoPorId], references: [id])
+
+  @@index([empresaId, createdAt])
+  @@index([bolsaId])
+  @@map("movimiento_puntos")
+}
+
+enum EstadoPeriodo {
+  ABIERTO
+  CERRADO
+}
+
+model PeriodoFacturacion {
+  id             String        @id @default(uuid())
+  empresaId      String        @map("empresa_id")
+  inicioEn       DateTime      @map("inicio_en")
+  finEn          DateTime      @map("fin_en")
+  saldoPendiente Int           @default(0) @map("saldo_pendiente")
+  estado         EstadoPeriodo @default(ABIERTO)
+  cerradoEn      DateTime?     @map("cerrado_en")
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  movimientos MovimientoPuntos[]
+
+  @@unique([empresaId, inicioEn])
+  @@map("periodo_facturacion")
+}
+
+// ---------------------------------------------------------------------------
+// F1 — Tickets de soporte
+// ---------------------------------------------------------------------------
+
+model CategoriaServicio {
+  id          String  @id @default(uuid())
+  clave       String  @unique
+  nombre      String
+  descripcion String
+  activa      Boolean @default(true)
+
+  tickets Ticket[]
+
+  @@map("categoria_servicio")
+}
+
+model EstadoTicket {
+  id      String  @id @default(uuid())
+  clave   String  @unique
+  nombre  String
+  orden   Int
+  esFinal Boolean @default(false) @map("es_final")
+
+  tickets           Ticket[]
+  historialAnterior TicketHistorial[]  @relation("EstadoAnterior")
+  historialNuevo    TicketHistorial[]  @relation("EstadoNuevo")
+  transicionesDesde TransicionTicket[] @relation("TransicionDesde")
+  transicionesHasta TransicionTicket[] @relation("TransicionHasta")
+
+  @@map("estado_ticket")
+}
+
+// La máquina de estados vive en datos y no en código: cada fila declara un salto
+// permitido y qué permiso exige. Añadir un estado o una transición no requiere
+// recompilar.
+model TransicionTicket {
+  id              String @id @default(uuid())
+  desdeEstadoId   String @map("desde_estado_id")
+  hastaEstadoId   String @map("hasta_estado_id")
+  permisoRequerido String @map("permiso_requerido")
+
+  desdeEstado EstadoTicket @relation("TransicionDesde", fields: [desdeEstadoId], references: [id])
+  hastaEstado EstadoTicket @relation("TransicionHasta", fields: [hastaEstadoId], references: [id])
+
+  @@unique([desdeEstadoId, hastaEstadoId])
+  @@map("transicion_ticket")
+}
+
+enum PrioridadTicket {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+model Ticket {
+  id                  String          @id @default(uuid())
+  codigo              String          @unique
+  empresaId           String          @map("empresa_id")
+  solicitanteId       String          @map("solicitante_id")
+  asesorId            String?         @map("asesor_id")
+  categoriaId         String          @map("categoria_id")
+  estadoId            String          @map("estado_id")
+  prioridad           PrioridadTicket @default(MEDIA)
+  titulo              String
+  descripcion         String
+  // Se define al cerrar: determina cuántos puntos consume el ticket.
+  tarifaAplicadaId    String?         @map("tarifa_aplicada_id")
+  tipoSolucion        String?         @map("tipo_solucion")
+  descripcionSolucion String?         @map("descripcion_solucion")
+  abiertoEn           DateTime        @default(now()) @map("abierto_en")
+  resueltoEn          DateTime?       @map("resuelto_en")
+  cerradoEn           DateTime?       @map("cerrado_en")
+
+  empresa        Empresa               @relation(fields: [empresaId], references: [id])
+  solicitante    Usuario               @relation("SolicitanteTicket", fields: [solicitanteId], references: [id])
+  asesor         Asesor?               @relation(fields: [asesorId], references: [id])
+  categoria      CategoriaServicio     @relation(fields: [categoriaId], references: [id])
+  estado         EstadoTicket          @relation(fields: [estadoId], references: [id])
+  tarifaAplicada TarifaServicio?       @relation(fields: [tarifaAplicadaId], references: [id])
+  historial      TicketHistorial[]
+  actividades    TicketActividad[]
+  adjuntos       Adjunto[]
+  movimientos    MovimientoPuntos[]
+  citas          Cita[]
+  encuesta       EncuestaTicket?
+  fidelidad      MovimientoFidelidad[]
+
+  @@index([empresaId, estadoId])
+  @@index([asesorId])
+  @@map("ticket")
+}
+
+model TicketHistorial {
+  id               String   @id @default(uuid())
+  ticketId         String   @map("ticket_id")
+  estadoAnteriorId String?  @map("estado_anterior_id")
+  estadoNuevoId    String   @map("estado_nuevo_id")
+  usuarioId        String   @map("usuario_id")
+  comentario       String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  ticket         Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  estadoAnterior EstadoTicket? @relation("EstadoAnterior", fields: [estadoAnteriorId], references: [id])
+  estadoNuevo    EstadoTicket  @relation("EstadoNuevo", fields: [estadoNuevoId], references: [id])
+  usuario        Usuario       @relation(fields: [usuarioId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_historial")
+}
+
+model TicketActividad {
+  id          String   @id @default(uuid())
+  ticketId    String   @map("ticket_id")
+  asesorId    String   @map("asesor_id")
+  descripcion String
+  horas       Decimal  @db.Decimal(5, 2)
+  fecha       DateTime
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  asesor Asesor @relation(fields: [asesorId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_actividad")
+}
+
+model EncuestaTicket {
+  id           String   @id @default(uuid())
+  ticketId     String   @unique @map("ticket_id")
+  calificacion Int
+  comentario   String?
+  respondidaEn DateTime @default(now()) @map("respondida_en")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("encuesta_ticket")
+}
+
+model Adjunto {
+  id           String   @id @default(uuid())
+  ticketId     String?  @map("ticket_id")
+  citaId       String?  @map("cita_id")
+  nombreArchivo String  @map("nombre_archivo")
+  ruta         String
+  tipoMime     String   @map("tipo_mime")
+  tamanoBytes  Int      @map("tamano_bytes")
+  subidoPorId  String   @map("subido_por_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  cita     Cita?   @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  subidoPor Usuario @relation(fields: [subidoPorId], references: [id])
+
+  @@index([ticketId])
+  @@index([citaId])
+  @@map("adjunto")
+}
+
+// ---------------------------------------------------------------------------
+// F3 — Agendamiento de citas
+// ---------------------------------------------------------------------------
+
+model Modalidad {
+  id               String @id @default(uuid())
+  clave            String @unique
+  nombre           String
+  tarifaPorDefectoId String? @map("tarifa_por_defecto_id")
+
+  tarifaPorDefecto TarifaServicio? @relation(fields: [tarifaPorDefectoId], references: [id])
+  citas            Cita[]
+
+  @@map("modalidad")
+}
+
+model EstadoCita {
+  id      String  @id @default(uuid())
+  clave   String  @unique
+  nombre  String
+  orden   Int
+  esFinal Boolean @default(false) @map("es_final")
+
+  citas Cita[]
+
+  @@map("estado_cita")
+}
+
+model Cita {
+  id                 String    @id @default(uuid())
+  codigo             String    @unique
+  empresaId          String    @map("empresa_id")
+  asesorId           String    @map("asesor_id")
+  solicitanteId      String    @map("solicitante_id")
+  ticketId           String?   @map("ticket_id")
+  modalidadId        String    @map("modalidad_id")
+  estadoId           String    @map("estado_id")
+  inicioEn           DateTime  @map("inicio_en")
+  finEn              DateTime  @map("fin_en")
+  direccion          String?
+  enlace             String?
+  motivoCancelacion  String?   @map("motivo_cancelacion")
+  tarifaAplicadaId   String?   @map("tarifa_aplicada_id")
+  // Marca las citas cubiertas por un canje de fidelización, que no consumen
+  // puntos del plan.
+  cubiertaPorCanjeId String?   @unique @map("cubierta_por_canje_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  empresa        Empresa            @relation(fields: [empresaId], references: [id])
+  asesor         Asesor             @relation(fields: [asesorId], references: [id])
+  solicitante    Usuario            @relation("SolicitanteCita", fields: [solicitanteId], references: [id])
+  ticket         Ticket?            @relation(fields: [ticketId], references: [id])
+  modalidad      Modalidad          @relation(fields: [modalidadId], references: [id])
+  estado         EstadoCita         @relation(fields: [estadoId], references: [id])
+  tarifaAplicada TarifaServicio?    @relation(fields: [tarifaAplicadaId], references: [id])
+  cubiertaPorCanje Canje?           @relation(fields: [cubiertaPorCanjeId], references: [id])
+  adjuntos       Adjunto[]
+  movimientos    MovimientoPuntos[]
+
+  // Sostiene la búsqueda de solapamientos: las citas de un asesor en un rango.
+  @@index([asesorId, inicioEn])
+  @@index([empresaId, inicioEn])
+  @@map("cita")
+}
+
+model DisponibilidadAsesor {
+  id          String    @id @default(uuid())
+  asesorId    String    @map("asesor_id")
+  // 0 = domingo ... 6 = sábado
+  diaSemana   Int       @map("dia_semana")
+  horaInicio  String    @map("hora_inicio")
+  horaFin     String    @map("hora_fin")
+  vigenteDesde DateTime? @map("vigente_desde")
+  vigenteHasta DateTime? @map("vigente_hasta")
+
+  asesor Asesor @relation(fields: [asesorId], references: [id], onDelete: Cascade)
+
+  @@index([asesorId, diaSemana])
+  @@map("disponibilidad_asesor")
+}
+
+// ---------------------------------------------------------------------------
+// F4 — Fidelización y recompensas
+// ---------------------------------------------------------------------------
+
+enum EventoFidelizacion {
+  TICKET_CON_EVIDENCIA
+  ENCUESTA_RESPONDIDA
+  RENOVACION_ANTICIPADA
+}
+
+model ReglaFidelizacion {
+  id     String             @id @default(uuid())
+  clave  String             @unique
+  nombre String
+  evento EventoFidelizacion
+  puntos Int
+  activa Boolean            @default(true)
+
+  movimientos MovimientoFidelidad[]
+
+  @@map("regla_fidelizacion")
+}
+
+enum TipoRecompensa {
+  DESCUENTO_RENOVACION
+  SERVICIO_SIN_CONSUMO
+  RECARGA_PUNTOS
+}
+
+model Recompensa {
+  id                    String         @id @default(uuid())
+  clave                 String         @unique
+  nombre                String
+  descripcion           String
+  costoPuntos           Int            @map("costo_puntos")
+  tipo                  TipoRecompensa
+  // Porcentaje de descuento, o cantidad de puntos según el tipo de recompensa.
+  valor                 Decimal        @db.Decimal(10, 2)
+  diasVigenciaBeneficio Int?           @map("dias_vigencia_beneficio")
+  activa                Boolean        @default(true)
+
+  canjes Canje[]
+
+  @@map("recompensa")
+}
+
+enum TipoMovimientoFidelidad {
+  ACUMULACION
+  CANJE
+  EXPIRACION
+}
+
+model MovimientoFidelidad {
+  id            String                  @id @default(uuid())
+  empresaId     String                  @map("empresa_id")
+  tipo          TipoMovimientoFidelidad
+  puntos        Int
+  reglaId       String?                 @map("regla_id")
+  ticketId      String?                 @map("ticket_id")
+  suscripcionId String?                 @map("suscripcion_id")
+  canjeId       String?                 @map("canje_id")
+  descripcion   String
+  createdAt     DateTime                @default(now()) @map("created_at")
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  regla       ReglaFidelizacion? @relation(fields: [reglaId], references: [id])
+  ticket      Ticket?            @relation(fields: [ticketId], references: [id])
+  suscripcion Suscripcion?       @relation(fields: [suscripcionId], references: [id])
+  canje       Canje?             @relation(fields: [canjeId], references: [id])
+
+  @@index([empresaId, createdAt])
+  @@map("movimiento_fidelidad")
+}
+
+enum EstadoCanje {
+  EMITIDO
+  APLICADO
+  VENCIDO
+}
+
+model Canje {
+  id           String      @id @default(uuid())
+  empresaId    String      @map("empresa_id")
+  recompensaId String      @map("recompensa_id")
+  usuarioId    String      @map("usuario_id")
+  estado       EstadoCanje @default(EMITIDO)
+  // Bolsa emitida cuando la recompensa entrega puntos de servicio. Es el vínculo
+  // que permite responder, desde el historial, qué se pagó y qué fue beneficio.
+  bolsaGeneradaId String?  @unique @map("bolsa_generada_id")
+  aplicadoEnSuscripcionId String? @map("aplicado_en_suscripcion_id")
+  venceEn      DateTime?   @map("vence_en")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  empresa       Empresa      @relation(fields: [empresaId], references: [id])
+  recompensa    Recompensa   @relation(fields: [recompensaId], references: [id])
+  usuario       Usuario      @relation(fields: [usuarioId], references: [id])
+  bolsaGenerada BolsaPuntos? @relation(fields: [bolsaGeneradaId], references: [id])
+  suscripcionAplicada Suscripcion? @relation(fields: [aplicadoEnSuscripcionId], references: [id])
+  movimientos   MovimientoFidelidad[]
+  citaCubierta  Cita?
+
+  @@index([empresaId, estado])
+  @@map("canje")
+}
