@@ -93,6 +93,9 @@ model Usuario {
   email           String   @unique
   passwordHash    String   @map("password_hash")
   emailVerificado Boolean  @default(false) @map("email_verificado")
+  // Las cuentas que crea Innovasoft nacen con una contraseña temporal; hasta que
+  // el usuario la cambie, la aplicación solo le permite esa operación.
+  debeCambiarPassword Boolean @default(false) @map("debe_cambiar_password")
   activo          Boolean  @default(true)
   createdAt       DateTime @default(now()) @map("created_at")
 
