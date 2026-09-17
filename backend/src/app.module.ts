@@ -3,8 +3,10 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { cargarConfiguracion } from './config/configuracion.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { CitasModule } from './modules/citas/citas.module.js';
 import { EmpresasModule } from './modules/empresas/empresas.module.js';
 import { PuntosModule } from './modules/puntos/puntos.module.js';
+import { UsuariosModule } from './modules/usuarios/usuarios.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SaludController } from './salud/salud.controller.js';
 import { CorreoModule } from './shared/correo/correo.module.js';
@@ -17,8 +19,10 @@ import { PermisosGuard } from './shared/guards/permisos.guard.js';
     PrismaModule,
     CorreoModule,
     AuthModule,
+    UsuariosModule,
     EmpresasModule,
     PuntosModule,
+    CitasModule,
   ],
   controllers: [SaludController],
   providers: [

@@ -14,6 +14,10 @@ export type Configuracion = {
     avisoSaldoBajo: number;
     avisoDiasParaVencer: number;
   };
+  citas: {
+    duracionPorDefectoMinutos: number;
+    horasMinimasParaCambios: number;
+  };
 };
 
 function requerida(clave: string): string {
@@ -62,6 +66,12 @@ export function cargarConfiguracion(): Configuracion {
       topeDescubierto: Number(process.env.PUNTOS_TOPE_DESCUBIERTO ?? 20),
       avisoSaldoBajo: Number(process.env.PUNTOS_AVISO_SALDO_BAJO ?? 5),
       avisoDiasParaVencer: Number(process.env.PUNTOS_AVISO_DIAS_VENCER ?? 10),
+    },
+    citas: {
+      duracionPorDefectoMinutos: Number(process.env.CITAS_DURACION_MINUTOS ?? 60),
+      // Antelación mínima para reprogramar o cancelar sin que quede registrado
+      // como fuera de plazo.
+      horasMinimasParaCambios: Number(process.env.CITAS_HORAS_MINIMAS ?? 24),
     },
   };
 }
