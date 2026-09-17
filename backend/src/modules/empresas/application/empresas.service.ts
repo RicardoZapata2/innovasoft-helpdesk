@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { CorreoService } from '../../../shared/correo/correo.service.js';
 import { hashPassword } from '../../auth/domain/password.js';
-import { generarPasswordTemporal } from '../domain/credenciales.js';
+import { generarPasswordTemporal } from '../../../shared/seguridad/credenciales.js';
 import type { ActualizarEmpresaDto } from '../presentation/dto/actualizar-empresa.dto.js';
 import type { CrearEmpresaDto } from '../presentation/dto/crear-empresa.dto.js';
 

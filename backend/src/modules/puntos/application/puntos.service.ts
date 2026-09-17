@@ -22,7 +22,7 @@ export type DetalleBolsa = {
 export type EstadoDeCuenta = {
   empresaId: string;
   saldoDisponible: number;
-  tieneePlanIlimitado: boolean;
+  tienePlanIlimitado: boolean;
   topeDescubierto: number;
   bolsas: DetalleBolsa[];
   alertas: Alerta[];
@@ -87,7 +87,7 @@ export class PuntosService {
     return {
       empresaId,
       saldoDisponible: estado.saldo,
-      tieneePlanIlimitado: estado.bolsas.some((bolsa) => bolsa.esIlimitada),
+      tienePlanIlimitado: estado.bolsas.some((bolsa) => bolsa.esIlimitada),
       topeDescubierto,
       bolsas: detalle,
       alertas: calcularAlertas(
