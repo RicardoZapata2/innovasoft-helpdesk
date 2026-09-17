@@ -330,7 +330,10 @@ export class CitasService {
   // dos. Un bloqueo sobre las citas existentes no serviría, porque la fila en
   // conflicto todavía no existe cuando se comprueba.
   private async bloquearAgendaDelAsesor(tx: ClientePrisma, asesorId: string): Promise<void> {
-    await tx.$queryRaw`SELECT id FROM asesor WHERE id = ${asesorId}::uuid FOR UPDATE`;
+    // Los identificadores son columnas de texto, no del tipo uuid de
+    // PostgreSQL: Prisma traduce así los campos String aunque su valor por
+    // defecto sea un UUID. Convertir el parámetro rompería la comparación.
+    await tx.$queryRaw`SELECT id FROM asesor WHERE id = ${asesorId} FOR UPDATE`;
   }
 
   private async verificarSinSolape(

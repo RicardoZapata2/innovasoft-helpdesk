@@ -97,9 +97,12 @@ export class ConsumoPuntosService {
     tx: ClientePrisma,
     empresaId: string,
   ): Promise<{ bolsas: BolsaVigente[]; saldo: number }> {
+    // empresa_id es una columna de texto: Prisma traduce así los campos String
+    // aunque guarden un UUID. Convertir el parámetro a uuid rompería la
+    // comparación con un "el operador no existe: text = uuid".
     await tx.$queryRaw`
       SELECT id FROM bolsa_puntos
-      WHERE empresa_id = ${empresaId}::uuid AND anulada = false
+      WHERE empresa_id = ${empresaId} AND anulada = false
       ORDER BY vence_en ASC
       FOR UPDATE`;
 
