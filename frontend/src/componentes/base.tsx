@@ -162,8 +162,12 @@ export function ErrorDelServidor({ error }: { error: unknown }) {
 
 export function Tabla({ cabeceras, children }: { cabeceras: string[]; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    // En una pantalla de teléfono una tabla de seis columnas no cabe. En lugar
+    // de encoger las celdas hasta que no se lean, se le da un ancho mínimo y se
+    // desplaza de lado dentro de su propia caja: el resto de la página no se
+    // mueve.
+    <div className="-mx-5 overflow-x-auto px-5">
+      <table className="w-full min-w-150 text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
             {cabeceras.map((cabecera) => (

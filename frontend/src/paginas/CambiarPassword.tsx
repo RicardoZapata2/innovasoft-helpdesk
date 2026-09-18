@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { BotonTema } from '../componentes/BotonTema';
 import { Aviso, Boton, Campo, ErrorDelServidor } from '../componentes/base';
 import { api } from '../lib/api';
 import { useSesion } from '../lib/sesion';
@@ -41,7 +42,19 @@ export function CambiarPassword() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="min-h-screen">
+      <header className="flex items-center justify-between px-4 py-4 sm:px-8">
+        <Link
+          to="/panel"
+          className="text-sm font-medium text-slate-600 transition hover:text-marca-600
+            dark:text-slate-300 dark:hover:text-marca-300"
+        >
+          Innovasoft
+        </Link>
+        <BotonTema />
+      </header>
+
+      <div className="flex items-center justify-center px-4 py-10">
       <form onSubmit={enviar} className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Cambia tu contraseña</h1>
 
@@ -87,6 +100,7 @@ export function CambiarPassword() {
           {enviando ? 'Guardando…' : 'Guardar'}
         </Boton>
       </form>
+      </div>
     </div>
   );
 }

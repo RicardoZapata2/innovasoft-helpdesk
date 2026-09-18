@@ -1,103 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import { Aviso, Boton, Cargando } from '../componentes/base';
 import { api } from '../lib/api';
 import { pesos } from '../lib/formato';
 import { useTema } from '../lib/tema';
-import type { Plan, Tarifa } from '../lib/tipos';
-
-// Los iconos van dibujados a mano con SVG en lugar de traer una librería de
-// iconos entera: son seis, pesan unos bytes y no añaden una dependencia más
-// que mantener.
-function Icono({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-6 w-6"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
-const ICONOS = {
-  ticket: (
-    <Icono>
-      <path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4Z" />
-      <path d="M13 7v10" strokeDasharray="2 2" />
-    </Icono>
-  ),
-  moneda: (
-    <Icono>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" />
-    </Icono>
-  ),
-  calendario: (
-    <Icono>
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4" />
-    </Icono>
-  ),
-  regalo: (
-    <Icono>
-      <rect x="3" y="9" width="18" height="12" rx="2" />
-      <path d="M3 13h18M12 9v12M12 9C9 9 7 8 7 6a2 2 0 0 1 4-1c1 1 1 4 1 4ZM12 9c3 0 5-1 5-3a2 2 0 0 0-4-1c-1 1-1 4-1 4Z" />
-    </Icono>
-  ),
-  escudo: (
-    <Icono>
-      <path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z" />
-      <path d="m9 12 2 2 4-4" />
-    </Icono>
-  ),
-  reloj: (
-    <Icono>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 7v5l3 2" />
-    </Icono>
-  ),
-};
-
-const FUNCIONALIDADES = [
-  {
-    icono: ICONOS.ticket,
-    titulo: 'Tickets con trazabilidad',
-    texto: 'Abre un caso con evidencias y sigue su estado hasta el cierre, con el reporte firmado.',
-  },
-  {
-    icono: ICONOS.calendario,
-    titulo: 'Agenda de visitas',
-    texto: 'Elige entre las horas realmente libres de cada asesor. Sin llamadas para cuadrar.',
-  },
-  {
-    icono: ICONOS.moneda,
-    titulo: 'Saldo al día',
-    texto: 'Cuántos puntos quedan, en qué se fueron y cuándo vencen. Siempre a la vista.',
-  },
-  {
-    icono: ICONOS.regalo,
-    titulo: 'Fidelización',
-    texto: 'Gana puntos por usar bien el sistema y cámbialos por descuentos o servicios.',
-  },
-  {
-    icono: ICONOS.escudo,
-    titulo: 'Cada empresa, sola',
-    texto: 'Ninguna empresa cliente puede ver los datos de otra. Es la regla que nunca se rompe.',
-  },
-  {
-    icono: ICONOS.reloj,
-    titulo: 'Sin saldo, sin freno',
-    texto: 'Si se acaban los puntos a mitad de un servicio, se registra y se cobra al periodo siguiente.',
-  },
-];
+import type { Plan, Recompensa, ReglaFidelizacion, Tarifa } from '../lib/tipos';
+import { NuestrosServicios } from './secciones-publico';
 
 const VENTAJAS: Record<string, string[]> = {
   esencial: ['Soporte remoto cuando lo necesites', 'Historial completo de consumos', 'Una visita presencial al mes'],
@@ -111,6 +19,14 @@ export function Publico() {
   const { tema, alternar } = useTema();
   const planes = useQuery({ queryKey: ['planes'], queryFn: () => api.publico<Plan[]>('/planes') });
   const tarifas = useQuery({ queryKey: ['tarifas'], queryFn: () => api.publico<Tarifa[]>('/tarifas') });
+  const recompensas = useQuery({
+    queryKey: ['recompensas'],
+    queryFn: () => api.publico<Recompensa[]>('/recompensas'),
+  });
+  const reglas = useQuery({
+    queryKey: ['reglas-fidelizacion'],
+    queryFn: () => api.publico<ReglaFidelizacion[]>('/reglas-fidelizacion'),
+  });
 
   const suscripciones = planes.data?.filter((plan) => plan.tipo === 'SUSCRIPCION') ?? [];
   const adicionales = planes.data?.filter((plan) => plan.tipo !== 'SUSCRIPCION') ?? [];
@@ -123,9 +39,10 @@ export function Publico() {
           <span className="text-lg font-semibold text-marca-700 dark:text-marca-300">Innovasoft</span>
 
           <nav className="hidden gap-6 text-sm text-slate-600 md:flex dark:text-slate-300">
-            <a href="#funcionalidades" className="hover:text-marca-600">Qué hace</a>
+            <a href="#servicios" className="hover:text-marca-600">Servicios</a>
             <a href="#planes" className="hover:text-marca-600">Planes</a>
             <a href="#tarifario" className="hover:text-marca-600">Tarifario</a>
+            <a href="#fidelizacion" className="hover:text-marca-600">Recompensas</a>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -156,7 +73,7 @@ export function Publico() {
           }}
         />
 
-        <div className="relative mx-auto max-w-6xl px-4 py-24 text-center">
+        <div className="relative mx-auto max-w-6xl px-4 py-16 text-center sm:py-24">
           <span className="inline-flex items-center gap-2 rounded-full border border-marca-200 bg-white px-4 py-1.5 text-xs font-medium text-marca-700 dark:border-marca-800 dark:bg-slate-900 dark:text-marca-300">
             Soporte técnico empresarial · Medellín
           </span>
@@ -177,9 +94,9 @@ export function Publico() {
             <a href="#planes">
               <Boton className="px-6 py-3 text-base">Ver los planes</Boton>
             </a>
-            <a href="#funcionalidades">
+            <a href="#servicios">
               <Boton variante="secundario" className="px-6 py-3 text-base">
-                Cómo funciona
+                Ver los servicios
               </Boton>
             </a>
           </div>
@@ -200,32 +117,8 @@ export function Publico() {
         </div>
       </section>
 
-      <main className="mx-auto max-w-6xl space-y-24 px-4 py-20">
-        <section id="funcionalidades">
-          <h2 className="text-center text-3xl font-semibold text-slate-900 dark:text-white">
-            Todo lo que pasa con tu soporte, en un solo lugar
-          </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-center text-slate-600 dark:text-slate-400">
-            Cuatro procesos que hoy viven en WhatsApp, correo y hojas de cálculo.
-          </p>
-
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {FUNCIONALIDADES.map((item) => (
-              <article
-                key={item.titulo}
-                className="group rounded-xl border border-slate-200 bg-white p-6 transition
-                  hover:-translate-y-1 hover:border-marca-300 hover:shadow-lg
-                  dark:border-slate-800 dark:bg-slate-900 dark:hover:border-marca-700"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-marca-50 text-marca-600 transition group-hover:bg-marca-600 group-hover:text-white dark:bg-marca-900/50 dark:text-marca-300">
-                  {item.icono}
-                </span>
-                <h3 className="mt-4 font-semibold text-slate-900 dark:text-slate-100">{item.titulo}</h3>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{item.texto}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+      <main className="mx-auto max-w-6xl space-y-16 px-4 py-14 sm:space-y-24 sm:py-20">
+        <NuestrosServicios />
 
         <section id="planes">
           <h2 className="text-center text-3xl font-semibold text-slate-900 dark:text-white">
@@ -276,6 +169,11 @@ export function Publico() {
                   <p className="mt-2 text-2xl font-semibold text-marca-700 dark:text-marca-300">
                     {pesos(plan.precio)}
                   </p>
+                  {plan.puntosIncluidos !== null && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {pesos(String(Number(plan.precio) / plan.puntosIncluidos))} por punto
+                    </p>
+                  )}
 
                   <ul className="mt-6 flex-1 space-y-2.5">
                     {(VENTAJAS[plan.clave] ?? []).map((ventaja) => (
@@ -368,6 +266,64 @@ export function Publico() {
                 <span className="text-sm text-slate-700 dark:text-slate-300">{tarifa.nombre}</span>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section id="fidelizacion">
+          <h2 className="text-center text-3xl font-semibold text-slate-900 dark:text-white">
+            Usar bien el sistema también te devuelve algo
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-slate-600 dark:text-slate-400">
+            Los puntos de fidelidad son una moneda aparte: se ganan, no se compran, y no se mezclan
+            con los puntos de servicio.
+          </p>
+
+          <div className="mt-10 grid gap-8 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Cómo se ganan
+              </h3>
+              <ul className="mt-4 space-y-3">
+                {reglas.data?.map((regla) => (
+                  <li
+                    key={regla.clave}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{regla.nombre}</span>
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      +{regla.puntos}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="lg:col-span-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                En qué se cambian
+              </h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {recompensas.data?.map((recompensa) => (
+                  <article
+                    key={recompensa.clave}
+                    className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-marca-300 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {recompensa.nombre}
+                      </h4>
+                      <span className="shrink-0 rounded-full bg-marca-600 px-2.5 py-1 text-xs font-bold text-white">
+                        {recompensa.costoPuntos}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">{recompensa.descripcion}</p>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Vigencia del beneficio: {recompensa.diasVigenciaBeneficio} días
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
