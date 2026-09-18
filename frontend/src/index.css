@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* El modo oscuro se decide con una clase en <html>, no con la preferencia del
+   sistema: así el interruptor de la aplicación manda sobre el sistema
+   operativo y la elección se puede recordar. */
+@custom-variant dark (&:where(.oscuro, .oscuro *));
+
+@theme {
+  --color-marca-50: #eef4ff;
+  --color-marca-100: #d9e5ff;
+  --color-marca-200: #bcd1ff;
+  --color-marca-300: #93b4ff;
+  --color-marca-400: #6288f0;
+  --color-marca-500: #3b62d9;
+  --color-marca-600: #2f4db0;
+  --color-marca-700: #263f8f;
+  --color-marca-800: #1f3372;
+  --color-marca-900: #1a2a5e;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased transition-colors;
+}
+
+.oscuro body {
+  @apply bg-slate-950 text-slate-200;
+}
