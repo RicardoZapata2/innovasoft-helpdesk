@@ -211,7 +211,7 @@ export function Usuarios() {
                 {!registro.activo ? (
                   <Etiqueta texto="Inactivo" color="slate" />
                 ) : registro.debeCambiarPassword ? (
-                  <Etiqueta texto="Sin estrenar" color="ambar" />
+                  <Etiqueta texto="Pendiente" color="ambar" />
                 ) : (
                   <Etiqueta texto="Activo" color="verde" />
                 )}

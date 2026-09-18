@@ -21,4 +21,16 @@ export class CatalogoController {
   tarifas() {
     return this.puntos.listarTarifas();
   }
+
+  @Publico()
+  @Get('recompensas')
+  recompensas() {
+    return this.puntos.listarRecompensas();
+  }
+
+  @Publico()
+  @Get('reglas-fidelizacion')
+  reglasDeFidelizacion() {
+    return this.puntos.listarReglasDeFidelizacion();
+  }
 }

@@ -143,16 +143,25 @@ const PERFILES: Array<{
   },
 ];
 
+// El precio por punto baja con el compromiso y sube con la urgencia: un plan
+// mensual sale más barato por punto que una recarga, y la recarga más barata que
+// un bono de una semana. Sin esa escala, contratar un plan no tendría ventaja
+// frente a comprar recargas sueltas.
+//
+//   Esencial      13.000 $/punto      Recarga 10   16.000 $/punto
+//   Profesional   11.500 $/punto      Recarga 25   15.000 $/punto
+//   Corporativo   10.000 $/punto      Recarga 50   14.000 $/punto
+//   Bono          19.000 $/punto  (solo 7 días de vigencia)
 const PLANES = [
-  { clave: 'esencial', nombre: 'Esencial', descripcion: 'Para empresas con soporte ocasional', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 30, esIlimitado: false, diasVigencia: 30, precio: '350000' },
-  { clave: 'profesional', nombre: 'Profesional', descripcion: 'Para una operación con soporte recurrente', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 100, esIlimitado: false, diasVigencia: 30, precio: '1000000' },
-  { clave: 'corporativo', nombre: 'Corporativo', descripcion: 'Para alto volumen o varias sedes', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 250, esIlimitado: false, diasVigencia: 30, precio: '2200000' },
+  { clave: 'esencial', nombre: 'Esencial', descripcion: 'Para empresas con soporte ocasional', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 30, esIlimitado: false, diasVigencia: 30, precio: '390000' },
+  { clave: 'profesional', nombre: 'Profesional', descripcion: 'Para una operación con soporte recurrente', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 100, esIlimitado: false, diasVigencia: 30, precio: '1150000' },
+  { clave: 'corporativo', nombre: 'Corporativo', descripcion: 'Para alto volumen o varias sedes', tipo: 'SUSCRIPCION' as const, puntosIncluidos: 250, esIlimitado: false, diasVigencia: 30, precio: '2500000' },
   { clave: 'ilimitado_mensual', nombre: 'Ilimitado mensual', descripcion: 'Servicio administrado sin límite de puntos', tipo: 'SUSCRIPCION' as const, puntosIncluidos: null, esIlimitado: true, diasVigencia: 30, precio: '4500000' },
-  { clave: 'ilimitado_anual', nombre: 'Ilimitado anual', descripcion: 'Servicio administrado sin límite, con tarifa anual', tipo: 'SUSCRIPCION' as const, puntosIncluidos: null, esIlimitado: true, diasVigencia: 365, precio: '45000000' },
-  { clave: 'recarga_10', nombre: 'Recarga de 10 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 10, esIlimitado: false, diasVigencia: 30, precio: '150000' },
-  { clave: 'recarga_25', nombre: 'Recarga de 25 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 25, esIlimitado: false, diasVigencia: 30, precio: '350000' },
-  { clave: 'recarga_50', nombre: 'Recarga de 50 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 50, esIlimitado: false, diasVigencia: 30, precio: '650000' },
-  { clave: 'bono_extraordinario', nombre: 'Bono extraordinario', descripcion: 'Cubre picos puntuales de trabajo durante una semana', tipo: 'BONO' as const, puntosIncluidos: 15, esIlimitado: false, diasVigencia: 7, precio: '250000' },
+  { clave: 'ilimitado_anual', nombre: 'Ilimitado anual', descripcion: 'Servicio administrado sin límite, con dos meses de ahorro frente al mensual', tipo: 'SUSCRIPCION' as const, puntosIncluidos: null, esIlimitado: true, diasVigencia: 365, precio: '45000000' },
+  { clave: 'recarga_10', nombre: 'Recarga de 10 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 10, esIlimitado: false, diasVigencia: 30, precio: '160000' },
+  { clave: 'recarga_25', nombre: 'Recarga de 25 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 25, esIlimitado: false, diasVigencia: 30, precio: '375000' },
+  { clave: 'recarga_50', nombre: 'Recarga de 50 puntos', descripcion: 'Excedente sobre el plan vigente', tipo: 'RECARGA' as const, puntosIncluidos: 50, esIlimitado: false, diasVigencia: 30, precio: '700000' },
+  { clave: 'bono_extraordinario', nombre: 'Bono extraordinario', descripcion: 'Cubre un pico de trabajo durante una semana', tipo: 'BONO' as const, puntosIncluidos: 15, esIlimitado: false, diasVigencia: 7, precio: '285000' },
 ];
 
 const TARIFAS = [
@@ -214,11 +223,17 @@ const REGLAS_FIDELIZACION = [
   { clave: 'renovacion_anticipada', nombre: 'Renovación del plan antes del vencimiento', evento: 'RENOVACION_ANTICIPADA' as const, puntos: 50 },
 ];
 
+// El catálogo es fijo y el costo en puntos conocido de antemano. Se descartó
+// una mecánica de azar —una ruleta o similar— porque el cliente es una empresa
+// que factura: un beneficio que a veces sale y a veces no es imposible de
+// presupuestar y difícil de reclamar si no sale.
 const RECOMPENSAS = [
   { clave: 'descuento_5', nombre: '5 % de descuento en la próxima renovación', descripcion: 'Se aplica automáticamente al renovar el plan', costoPuntos: 100, tipo: 'DESCUENTO_RENOVACION' as const, valor: '5', diasVigenciaBeneficio: 90 },
   { clave: 'visita_sin_consumo', nombre: 'Visita presencial sin consumo de puntos', descripcion: 'Una visita técnica en la ciudad que no descuenta puntos del plan', costoPuntos: 250, tipo: 'SERVICIO_SIN_CONSUMO' as const, valor: '1', diasVigenciaBeneficio: 60 },
+  { clave: 'tres_por_dos_visitas', nombre: 'Tres visitas por el precio de dos', descripcion: 'La tercera visita presencial del mes no descuenta puntos', costoPuntos: 350, tipo: 'SERVICIO_SIN_CONSUMO' as const, valor: '1', diasVigenciaBeneficio: 30 },
   { clave: 'descuento_10', nombre: '10 % de descuento en la próxima renovación', descripcion: 'Se aplica automáticamente al renovar el plan', costoPuntos: 400, tipo: 'DESCUENTO_RENOVACION' as const, valor: '10', diasVigenciaBeneficio: 90 },
   { clave: 'recarga_10_puntos', nombre: 'Recarga de 10 puntos de servicio', descripcion: 'Emite una bolsa promocional con 30 días de vigencia', costoPuntos: 500, tipo: 'RECARGA_PUNTOS' as const, valor: '10', diasVigenciaBeneficio: 30 },
+  { clave: 'descuento_15', nombre: '15 % de descuento en la próxima renovación', descripcion: 'El mayor descuento del catálogo, para clientes constantes', costoPuntos: 600, tipo: 'DESCUENTO_RENOVACION' as const, valor: '15', diasVigenciaBeneficio: 90 },
 ];
 
 const MODALIDADES = [

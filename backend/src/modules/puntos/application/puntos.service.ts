@@ -60,6 +60,31 @@ export class PuntosService {
     });
   }
 
+  // El catálogo de recompensas es público: forma parte de lo que se le ofrece a
+  // una empresa antes de ser cliente, igual que los planes.
+  listarRecompensas() {
+    return this.prisma.recompensa.findMany({
+      where: { activa: true },
+      orderBy: { costoPuntos: 'asc' },
+      select: {
+        clave: true,
+        nombre: true,
+        descripcion: true,
+        costoPuntos: true,
+        tipo: true,
+        diasVigenciaBeneficio: true,
+      },
+    });
+  }
+
+  listarReglasDeFidelizacion() {
+    return this.prisma.reglaFidelizacion.findMany({
+      where: { activa: true },
+      orderBy: { puntos: 'asc' },
+      select: { clave: true, nombre: true, puntos: true, evento: true },
+    });
+  }
+
   async obtenerEstadoDeCuenta(empresaId: string): Promise<EstadoDeCuenta> {
     const ahora = new Date();
     const estado = await leerEstado(this.prisma, empresaId, ahora);

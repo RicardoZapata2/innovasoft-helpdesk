@@ -171,3 +171,19 @@ export type UsuarioListado = {
   empresa: { id: string; razonSocial: string } | null;
   asesor: { id: string; especialidad: string | null } | null;
 };
+
+export type Recompensa = {
+  clave: string;
+  nombre: string;
+  descripcion: string;
+  costoPuntos: number;
+  tipo: 'DESCUENTO_RENOVACION' | 'SERVICIO_SIN_CONSUMO' | 'RECARGA_PUNTOS';
+  diasVigenciaBeneficio: number;
+};
+
+export type ReglaFidelizacion = {
+  clave: string;
+  nombre: string;
+  puntos: number;
+  evento: string;
+};
