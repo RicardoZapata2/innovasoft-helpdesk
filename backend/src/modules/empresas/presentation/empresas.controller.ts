@@ -56,6 +56,13 @@ export class EmpresasController {
   @HttpCode(HttpStatus.OK)
   @Post(':id/desactivar')
   desactivar(@UsuarioActual() usuario: UsuarioAutenticado, @Param('id', ParseUUIDPipe) id: string) {
-    return this.empresas.desactivar(id, usuario.id);
+    return this.empresas.cambiarEstado(id, false, usuario.id);
+  }
+
+  @RequierePermisos('empresas.desactivar')
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/activar')
+  activar(@UsuarioActual() usuario: UsuarioAutenticado, @Param('id', ParseUUIDPipe) id: string) {
+    return this.empresas.cambiarEstado(id, true, usuario.id);
   }
 }

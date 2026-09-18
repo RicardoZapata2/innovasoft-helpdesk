@@ -188,25 +188,34 @@ export class EmpresasService {
   }
 
   // Desactivar no borra: el historial de tickets, citas y movimientos de una
-  // empresa tiene que seguir existiendo aunque deje de ser cliente.
-  async desactivar(empresaId: string, usuarioId: string) {
+  // empresa tiene que seguir existiendo aunque deje de ser cliente. Por eso la
+  // operación es reversible, y activar vuelve a habilitar a sus usuarios.
+  async cambiarEstado(empresaId: string, activa: boolean, usuarioId: string) {
     await this.obtener(empresaId);
 
     return this.prisma.$transaction(async (tx) => {
-      const empresa = await tx.empresa.update({
-        where: { id: empresaId },
-        data: { activa: false },
-      });
+      const empresa = await tx.empresa.update({ where: { id: empresaId }, data: { activa } });
 
-      await tx.usuario.updateMany({ where: { empresaId }, data: { activo: false } });
+      await tx.usuario.updateMany({ where: { empresaId }, data: { activo: activa } });
+
+      // Al desactivar hay que cortar las sesiones abiertas: si no, quien ya
+      // estuviera dentro seguiría trabajando hasta que caducara su token.
+      if (!activa) {
+        const usuarios = await tx.usuario.findMany({ where: { empresaId }, select: { id: true } });
+
+        await tx.sesionRefresh.updateMany({
+          where: { usuarioId: { in: usuarios.map((registro) => registro.id) }, revocadoEn: null },
+          data: { revocadoEn: new Date() },
+        });
+      }
 
       await tx.registroAuditoria.create({
         data: {
           usuarioId,
           entidad: 'empresa_cliente',
           entidadId: empresaId,
-          accion: 'DESACTIVAR',
-          datosNuevos: { activa: false },
+          accion: activa ? 'ACTIVAR' : 'DESACTIVAR',
+          datosNuevos: { activa },
         },
       });
 
