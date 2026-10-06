@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BotonTema } from '../componentes/BotonTema';
-import { Boton, Campo, ErrorDelServidor } from '../componentes/base';
+import { Aviso, Boton, Campo, ErrorDelServidor } from '../componentes/base';
 import { useSesion } from '../lib/sesion';
 
 export function Entrar() {
   const { entrar } = useSesion();
   const navegar = useNavigate();
+  const aviso = (useLocation().state as { aviso?: string } | null)?.aviso;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -54,6 +55,7 @@ export function Entrar() {
           >
             <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Entrar</h1>
 
+            {aviso !== undefined && error === null && <Aviso tipo="exito">{aviso}</Aviso>}
             {error !== null && <ErrorDelServidor error={error} />}
 
             <Campo
@@ -78,8 +80,17 @@ export function Entrar() {
               {enviando ? 'Entrando…' : 'Entrar'}
             </Boton>
 
+            <p className="text-center text-sm">
+              <Link to="/recuperar-password" className="text-marca-600 hover:underline dark:text-marca-300">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </p>
+
             <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-              ¿Tu empresa aún no tiene cuenta? Innovasoft la habilita y te envía las credenciales.
+              ¿Tu empresa aún no tiene cuenta?{' '}
+              <Link to="/registro" className="font-medium text-marca-600 hover:underline dark:text-marca-300">
+                Regístrala aquí
+              </Link>
             </p>
           </form>
         </div>

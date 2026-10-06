@@ -5,7 +5,7 @@ import { Aviso, Boton, Cargando, Etiqueta, Seleccion, Tarjeta, Vacio } from '../
 import { api } from '../lib/api';
 import { fechaCorta, fechaLarga, puntos } from '../lib/formato';
 import { useSesion } from '../lib/sesion';
-import type { Cita, Empresa, EstadoDeCuenta, ListaCitas, Plan } from '../lib/tipos';
+import type { Cita, Empresa, EstadoDeCuenta, ListaCitas, ListaTickets, Plan, Satisfaccion } from '../lib/tipos';
 
 const COLOR_ALERTA = {
   SALDO_BAJO: 'aviso',
@@ -73,13 +73,107 @@ function ProximasCitas({ consulta, titulo }: { consulta: string; titulo: string 
   );
 }
 
+// Resumen de la bandeja por estado. Cada cifra lleva a la bandeja ya filtrada
+// mentalmente: es lo primero que el usuario quiere saber al entrar.
+function ResumenTickets({ titulo }: { titulo: string }) {
+  const tickets = useQuery({
+    queryKey: ['tickets', 'lista', 'panel'],
+    queryFn: () => api.get<ListaTickets>('/tickets?tamano=5'),
+  });
+
+  const contar = (...claves: string[]) =>
+    tickets.data?.porEstado.filter((e) => claves.includes(e.clave)).reduce((t, e) => t + e.cantidad, 0) ?? 0;
+
+  const indicadores = [
+    { titulo: 'Sin asignar', valor: contar('abierto', 'reabierto') },
+    { titulo: 'En atención', valor: contar('asignado', 'en_atencion', 'en_espera_cliente') },
+    { titulo: 'Resueltos', valor: contar('resuelto') },
+    { titulo: 'Cerrados', valor: contar('cerrado') },
+  ];
+
+  return (
+    <Tarjeta
+      titulo={titulo}
+      accion={
+        <Link to="/tickets" className="text-sm font-medium text-marca-600 hover:underline dark:text-marca-300">
+          Ir a la bandeja
+        </Link>
+      }
+    >
+      {tickets.isPending && <Cargando />}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {indicadores.map((indicador) => (
+          <div key={indicador.titulo}>
+            <p className="text-3xl font-bold text-marca-700 dark:text-marca-300">{indicador.valor}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{indicador.titulo}</p>
+          </div>
+        ))}
+      </div>
+      {tickets.data !== undefined && tickets.data.tickets.length > 0 && (
+        <ul className="mt-4 divide-y divide-slate-100 border-t border-slate-100 dark:divide-slate-800 dark:border-slate-800">
+          {tickets.data.tickets.map((ticket) => (
+            <li key={ticket.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <Link to={`/tickets/${ticket.id}`} className="text-sm text-slate-700 hover:underline dark:text-slate-300">
+                <span className="font-semibold text-marca-700 dark:text-marca-300">{ticket.codigo}</span> · {ticket.titulo}
+              </Link>
+              <Etiqueta texto={ticket.estado.nombre} color={ticket.estado.esFinal ? 'slate' : 'azul'} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Tarjeta>
+  );
+}
+
+// Reporte de calificación de clientes: promedio y distribución de las
+// encuestas respondidas al resolver cada ticket.
+function ReporteSatisfaccion() {
+  const satisfaccion = useQuery({
+    queryKey: ['tickets', 'satisfaccion'],
+    queryFn: () => api.get<Satisfaccion>('/tickets/satisfaccion'),
+  });
+
+  const maximo = Math.max(1, ...(satisfaccion.data?.distribucion.map((d) => d.cantidad) ?? [0]));
+
+  return (
+    <Tarjeta titulo="Calificación de los clientes">
+      {satisfaccion.isPending && <Cargando />}
+      {satisfaccion.data !== undefined && (
+        <div className="grid gap-6 sm:grid-cols-3">
+          <div>
+            <p className="text-4xl font-bold text-amber-500">
+              {satisfaccion.data.promedio === null ? '—' : satisfaccion.data.promedio.toFixed(1)}
+              <span className="text-lg text-slate-400"> / 5</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {satisfaccion.data.respondidas} encuesta(s) respondida(s)
+            </p>
+          </div>
+          <ul className="space-y-1.5 sm:col-span-2">
+            {[...satisfaccion.data.distribucion].reverse().map((fila) => (
+              <li key={fila.calificacion} className="flex items-center gap-3 text-xs">
+                <span className="w-10 text-amber-500">{'★'.repeat(fila.calificacion)}</span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="h-full rounded-full bg-amber-400" style={{ width: `${(fila.cantidad / maximo) * 100}%` }} />
+                </div>
+                <span className="w-6 text-right text-slate-500 dark:text-slate-400">{fila.cantidad}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Tarjeta>
+  );
+}
+
 function PanelAsesor() {
   return (
     <>
       <Aviso tipo="info">
-        Aquí ves las citas que tienes asignadas. Desde el listado puedes marcarlas como
-        realizadas, que es lo que descuenta los puntos de la empresa.
+        Aquí ves tus casos y citas asignados. En cada ticket registras actividades y horas, lo resuelves y lo
+        cierras: el cierre es lo que descuenta los puntos de la empresa.
       </Aviso>
+      <ResumenTickets titulo="Mis tickets" />
       <ProximasCitas consulta="tamano=10" titulo="Mi agenda" />
     </>
   );
@@ -113,6 +207,11 @@ function PanelInnovasoft() {
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{indicador.pie}</p>
           </Tarjeta>
         ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ResumenTickets titulo="Operación de soporte" />
+        <ReporteSatisfaccion />
       </div>
 
       <ProximasCitas consulta="tamano=8" titulo="Agenda de la operación" />
@@ -237,6 +336,11 @@ function PanelCliente() {
           <p className="mt-3 text-sm text-red-700 dark:text-red-400">{(contratar.error as Error).message}</p>
         )}
       </Tarjeta>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ResumenTickets titulo="Solicitudes de soporte" />
+        <ReporteSatisfaccion />
+      </div>
 
       <ProximasCitas consulta="tamano=5" titulo="Próximas citas" />
     </>

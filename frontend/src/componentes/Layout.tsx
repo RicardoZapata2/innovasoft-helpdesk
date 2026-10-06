@@ -8,8 +8,10 @@ type Enlace = { a: string; texto: string; permisos?: string[] };
 
 const ENLACES: Enlace[] = [
   { a: '/panel', texto: 'Panel' },
+  { a: '/tickets', texto: 'Tickets', permisos: ['tickets.ver_todos', 'tickets.ver_empresa', 'tickets.ver_propios'] },
   { a: '/citas', texto: 'Citas', permisos: ['citas.ver_todas', 'citas.ver_empresa', 'citas.ver_propias'] },
   { a: '/kardex', texto: 'Consumos', permisos: ['puntos.ver_kardex'] },
+  { a: '/fidelizacion', texto: 'Fidelización', permisos: ['fidelizacion.ver_saldo', 'fidelizacion.ver_historial'] },
   { a: '/empresas', texto: 'Empresas', permisos: ['empresas.ver_todas'] },
   { a: '/usuarios', texto: 'Usuarios', permisos: ['usuarios.ver'] },
   { a: '/perfiles', texto: 'Perfiles y permisos', permisos: ['perfiles.ver'] },
@@ -23,7 +25,7 @@ export function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const visibles = ENLACES.filter((enlace) => enlace.permisos === undefined || puede(...enlace.permisos));
-  const actual = visibles.find((enlace) => enlace.a === ubicacion.pathname)?.texto ?? 'Panel';
+  const actual = visibles.find((enlace) => ubicacion.pathname.startsWith(enlace.a))?.texto ?? 'Panel';
 
   const clase = ({ isActive }: { isActive: boolean }) =>
     `block rounded-lg px-3 py-2 text-sm font-medium transition ${

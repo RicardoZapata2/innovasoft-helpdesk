@@ -55,6 +55,9 @@ export function Publico() {
             >
               {tema === 'claro' ? '🌙' : '☀️'}
             </button>
+            <Link to="/registro" className="hidden sm:block">
+              <Boton variante="secundario">Registrar empresa</Boton>
+            </Link>
             <Link to="/entrar">
               <Boton>Entrar</Boton>
             </Link>

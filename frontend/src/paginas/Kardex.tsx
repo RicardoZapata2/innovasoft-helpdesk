@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { SelectorEmpresa } from '../componentes/SelectorEmpresa';
 import { Boton, Cargando, ErrorDelServidor, Etiqueta, Seleccion, Tabla, Tarjeta, Vacio } from '../componentes/base';
 import { api } from '../lib/api';
@@ -18,7 +19,7 @@ const COLORES: Record<string, string> = {
 };
 
 export function Kardex() {
-  const { usuario } = useSesion();
+  const { usuario, puede } = useSesion();
   const esInnovasoft = usuario?.ambito === 'INNOVASOFT';
 
   const [empresaId, setEmpresaId] = useState('');
@@ -39,6 +40,18 @@ export function Kardex() {
     queryKey: ['kardex', consulta.toString()],
     queryFn: () => api.get<TipoKardex>(`/puntos/kardex?${consulta.toString()}`),
     enabled: listo,
+  });
+
+  // El PDF lleva los mismos filtros que la tabla, pero sin paginar: es el
+  // historial completo del periodo elegido.
+  const exportar = useMutation({
+    mutationFn: () => {
+      const filtros = new URLSearchParams(consulta);
+      filtros.delete('pagina');
+      filtros.delete('tamano');
+
+      return api.descargar(`/puntos/kardex/pdf?${filtros.toString()}`, 'kardex-puntos.pdf');
+    },
   });
 
   return (
@@ -106,7 +119,7 @@ export function Kardex() {
           </label>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Boton
             variante="secundario"
             onClick={() => {
@@ -118,7 +131,17 @@ export function Kardex() {
           >
             Limpiar filtros
           </Boton>
+          {puede('puntos.exportar_kardex') && (
+            <Boton disabled={!listo || exportar.isPending} onClick={() => exportar.mutate()}>
+              {exportar.isPending ? 'Generando…' : 'Exportar a PDF'}
+            </Boton>
+          )}
         </div>
+        {exportar.isError && (
+          <div className="mt-4">
+            <ErrorDelServidor error={exportar.error} />
+          </div>
+        )}
       </Tarjeta>
 
       {!listo && <Vacio texto="Elige una empresa para ver su historial de consumos." />}
@@ -130,7 +153,7 @@ export function Kardex() {
           {kardex.data.movimientos.length === 0 ? (
             <Vacio texto="No hay movimientos con esos filtros." />
           ) : (
-            <Tabla cabeceras={['Fecha', 'Tipo', 'Concepto', 'Vence', 'Puntos']}>
+            <Tabla cabeceras={['Fecha', 'Tipo', 'Concepto', 'Origen', 'Vence', 'Puntos']}>
               {kardex.data.movimientos.map((movimiento) => (
                 <tr key={movimiento.id}>
                   <td className="py-3 pr-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
@@ -140,6 +163,24 @@ export function Kardex() {
                     <Etiqueta texto={movimiento.tipo} color={COLORES[movimiento.tipo] ?? 'slate'} />
                   </td>
                   <td className="py-3 pr-4 text-slate-700 dark:text-slate-300">{movimiento.descripcion}</td>
+                  <td className="py-3 pr-4 whitespace-nowrap">
+                    {/* Lo que llegó por canje de fidelización se marca aparte:
+                        el cliente debe distinguir lo pagado de lo regalado. */}
+                    {movimiento.ticketId !== null ? (
+                      <Link
+                        to={`/tickets/${movimiento.ticketId}`}
+                        className="text-xs font-medium text-marca-600 hover:underline dark:text-marca-300"
+                      >
+                        {movimiento.ticket?.codigo ?? 'Ticket'}
+                      </Link>
+                    ) : movimiento.cita !== null ? (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{movimiento.cita.codigo}</span>
+                    ) : movimiento.bolsa?.origen === 'PROMOCION' ? (
+                      <Etiqueta texto="Beneficio" color="verde" />
+                    ) : (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{movimiento.bolsa?.origen ?? '—'}</span>
+                    )}
+                  </td>
                   <td className="py-3 pr-4 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
                     {movimiento.bolsa === null ? '—' : fechaCorta(movimiento.bolsa.venceEn)}
                   </td>

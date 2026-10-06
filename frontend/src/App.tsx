@@ -6,17 +6,29 @@ import { CambiarPassword } from './paginas/CambiarPassword';
 import { Citas } from './paginas/Citas';
 import { Empresas } from './paginas/Empresas';
 import { Entrar } from './paginas/Entrar';
+import { Fidelizacion } from './paginas/Fidelizacion';
 import { Kardex } from './paginas/Kardex';
 import { Panel } from './paginas/Panel';
 import { Perfiles } from './paginas/Perfiles';
 import { Publico } from './paginas/Publico';
+import { RecuperarPassword, RestablecerPassword } from './paginas/RecuperarPassword';
+import { Registro } from './paginas/Registro';
+import { TicketDetalle } from './paginas/TicketDetalle';
+import { Tickets } from './paginas/Tickets';
 import { Usuarios } from './paginas/Usuarios';
+import { VerificarEmail } from './paginas/VerificarEmail';
+
+const VER_TICKETS = ['tickets.ver_todos', 'tickets.ver_empresa', 'tickets.ver_propios'];
 
 export function App() {
   return (
     <Routes>
       <Route path="/" element={<Publico />} />
       <Route path="/entrar" element={<Entrar />} />
+      <Route path="/registro" element={<Registro />} />
+      <Route path="/verificar-email" element={<VerificarEmail />} />
+      <Route path="/recuperar-password" element={<RecuperarPassword />} />
+      <Route path="/restablecer-password" element={<RestablecerPassword />} />
 
       <Route element={<RutaProtegida />}>
         <Route path="/cambiar-password" element={<CambiarPassword />} />
@@ -27,6 +39,19 @@ export function App() {
           <Route path="/panel" element={<Panel />} />
           <Route path="/citas" element={<Citas />} />
           <Route path="/kardex" element={<Kardex />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={VER_TICKETS} />}>
+        <Route element={<Layout />}>
+          <Route path="/tickets" element={<Tickets />} />
+          <Route path="/tickets/:id" element={<TicketDetalle />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={['fidelizacion.ver_saldo', 'fidelizacion.ver_historial']} />}>
+        <Route element={<Layout />}>
+          <Route path="/fidelizacion" element={<Fidelizacion />} />
         </Route>
       </Route>
 
