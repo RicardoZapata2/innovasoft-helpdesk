@@ -23,11 +23,16 @@ permite señalar cada responsabilidad sin ambigüedad.
 
 ### Por qué NestJS y no Express o Next.js
 
-NestJS impone una estructura por capas (módulo → controlador → servicio → repositorio)
-que coincide con la forma en que el proyecto fue descrito en la propuesta. Además, tres
-requisitos transversales que prometimos son piezas nativas del framework y no inventos
-propios: los **guards** resuelven el control de permisos, los **interceptors** resuelven
-la auditoría y los **pipes** resuelven la validación de entrada.
+NestJS impone una estructura por capas (módulo → controlador → servicio) que coincide
+con la forma en que el proyecto fue descrito en la propuesta. Además, los requisitos
+transversales que prometimos se apoyan en piezas nativas del framework y no en inventos
+propios: los **guards** resuelven la autenticación y el control de permisos, los
+**pipes** resuelven la validación de entrada y los **filtros de excepción** dan formato
+uniforme a los errores.
+
+La auditoría no se hizo con un interceptor sino dentro de la misma transacción de cada
+operación sensible: si el cambio se revierte, su registro de auditoría también, y nunca
+queda una huella de algo que no ocurrió.
 
 Se descartó Express porque no impone estructura: con el volumen de módulos de este
 proyecto, el resultado tiende a desordenarse. Se descartó Next.js porque mezcla
@@ -47,14 +52,17 @@ API de alto nivel.
 
 ### Por qué capas limpias y no arquitectura hexagonal completa
 
-Cada módulo se organiza en cuatro capas:
+Cada módulo se organiza en tres capas:
 
 | Capa | Responsabilidad | Depende de |
 |---|---|---|
-| `domain` | Reglas del negocio y entidades | Nada |
-| `application` | Casos de uso que orquestan el dominio | `domain` |
-| `infrastructure` | Repositorios Prisma, adaptadores externos | `domain` |
+| `domain` | Reglas del negocio como funciones puras | Nada |
+| `application` | Casos de uso que orquestan el dominio y usan Prisma | `domain` |
 | `presentation` | Controladores, DTOs, validación | `application` |
+
+Se evaluó una cuarta capa `infrastructure` con repositorios propios sobre Prisma. Se
+descartó porque Prisma ya es esa capa: envolverlo en otro repositorio solo repetía sus
+métodos con otro nombre.
 
 La regla es que las dependencias apuntan hacia adentro: el dominio no sabe que existe
 Prisma ni HTTP, por lo que sus reglas se pueden probar sin base de datos.
@@ -152,13 +160,15 @@ backend/
       citas/             F3
       fidelizacion/      F4
     shared/
-      guards/            autenticación, permisos, aislamiento por empresa
-      interceptors/      auditoría
-      filters/           manejo global de errores
+      guards/            autenticación y permisos
+      seguridad/         aislamiento por empresa, credenciales
+      filtros/           manejo global de errores (RFC 7807)
+      pdf/               plantilla común de los reportes
 frontend/
   src/
-    features/            una carpeta por módulo
-    components/          componentes reutilizables
-    lib/                 cliente HTTP, utilidades
+    paginas/             una pantalla por ruta
+    componentes/         componentes reutilizables
+    lib/                 cliente HTTP, sesión, tipos, formato
 docs/                    documentación del proyecto
+render.yaml              despliegue en Render
 ```

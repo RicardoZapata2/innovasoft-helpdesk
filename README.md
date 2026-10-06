@@ -2,7 +2,8 @@
 
 Sistema web de gestión de soporte técnico y puntos para Innovasoft.
 
-Proyecto de Práctica Profesional Integral (PPI-T).
+Proyecto de Práctica Profesional Integral (PPI-T) — Tecnología en Sistematización de
+Datos, Politécnico Colombiano Jaime Isaza Cadavid.
 
 | Estudiante | Documento |
 |---|---|
@@ -27,32 +28,71 @@ La plataforma centraliza cuatro procesos:
 
 ## Tecnologías
 
-Backend con NestJS y TypeScript sobre PostgreSQL mediante Prisma. Frontend con React,
-Vite y Tailwind CSS. Pruebas con Jest.
+| Capa | Tecnología |
+|---|---|
+| Backend | NestJS 12 + TypeScript |
+| ORM | Prisma 7 con el adaptador `pg` |
+| Base de datos | PostgreSQL 18 |
+| Frontend | React 19 + Vite 7 + TypeScript |
+| Estilos | Tailwind CSS 4 |
+| Datos en cliente | TanStack Query |
+| Seguridad | JWT con refresh rotativo, Argon2id |
+| Reportes | PDFKit |
+| Pruebas | Vitest + Supertest |
 
 ## Puesta en marcha
 
-Requiere Node.js 20 o superior y PostgreSQL 18.
+Requiere Node.js 22 o superior y PostgreSQL 18.
 
 ```bash
-# Base de datos
-psql -U postgres -c "CREATE ROLE innovasoft_app WITH LOGIN PASSWORD 'innovasoft_dev_2026';"
+# Base de datos (una sola vez)
+psql -U postgres -c "CREATE ROLE innovasoft_app WITH LOGIN PASSWORD 'innovasoft_dev_2026' CREATEDB;"
 psql -U postgres -c "CREATE DATABASE innovasoft_helpdesk OWNER innovasoft_app ENCODING 'UTF8';"
 
 # Backend
 cd backend
 npm install
-cp .env.example .env
-npx prisma migrate dev
+cp .env.example .env          # completar JWT_ACCESS_SECRET y JWT_REFRESH_SECRET
+npx prisma migrate deploy
+npm run db:generate
+npm run db:seed               # permisos, perfiles, planes, tarifas, estados
+npm run db:demo               # usuarios, empresas, tickets y citas de ejemplo
 npm run start:dev
 
-# Frontend
+# Frontend (otra terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-La API queda en `http://localhost:3000` y la aplicación en `http://localhost:5173`.
+La aplicación queda en `http://localhost:5173`, la API en `http://localhost:3000/api`
+y la documentación interactiva de la API en `http://localhost:3000/api/docs`.
+
+## Usuarios de demostración
+
+| Perfil | Correo | Contraseña |
+|---|---|---|
+| Administrador Innovasoft | admin@innovasoft.com | Admin123* |
+| Coordinador de soporte | coordinador@innovasoft.com | Innovasoft2026 |
+| Asesor | asesor.redes@innovasoft.com | Innovasoft2026 |
+| Asesor | asesor.software@innovasoft.com | Innovasoft2026 |
+| Administrador de empresa cliente | gerencia@andina.com | Innovasoft2026 |
+| Usuario de empresa cliente | sistemas@andina.com | Innovasoft2026 |
+| Administrador de empresa cliente | gerencia@delnorte.com | Innovasoft2026 |
+
+## Pruebas
+
+```bash
+cd backend
+npm run test       # reglas de negocio (motor de puntos, estados, agenda, canjes)
+npm run test:e2e   # integración contra la base con los datos de demostración
+```
+
+## Despliegue
+
+`render.yaml` describe el despliegue en Render: una base PostgreSQL y un servicio web
+que compila el frontend y lo entrega desde la misma API. En Render se crea un
+*Blueprint* apuntando a este repositorio y el resto es automático.
 
 ## Documentación
 
