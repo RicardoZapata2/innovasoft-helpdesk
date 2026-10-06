@@ -336,9 +336,12 @@ export function Publico() {
         >
           <h2 className="text-3xl font-semibold">¿Quieres ser cliente?</h2>
           <p className="mx-auto mt-4 max-w-xl text-marca-100">
-            Escríbenos y habilitamos la cuenta de tu empresa. Te enviamos las credenciales de acceso
-            al correo del administrador que nos indiques.
+            Registra tu empresa en un minuto y quedas como su administrador. Si prefieres que la
+            creemos por ti, escríbenos y te enviamos las credenciales al correo que nos indiques.
           </p>
+          <Link to="/registro" className="mt-6 inline-block">
+            <Boton variante="secundario">Registrar mi empresa</Boton>
+          </Link>
           <div className="mt-8 flex flex-wrap justify-center gap-6 text-lg font-medium">
             <span>contacto@innovasoft.com</span>
             <span className="hidden sm:inline text-marca-300">·</span>
