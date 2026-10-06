@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { RequierePermisos } from '../../../shared/decoradores/permisos.decorator.js';
 import { UsuarioActual } from '../../../shared/decoradores/usuario-actual.decorator.js';
 import { empresaDelUsuario } from '../../../shared/seguridad/empresa-del-usuario.js';
 import type { UsuarioAutenticado } from '../../../shared/tipos/usuario-autenticado.js';
 import { PuntosService } from '../application/puntos.service.js';
+import { generarReporteKardex } from '../application/reporte-kardex.js';
 import { AjusteDto } from './dto/ajuste.dto.js';
 import { ConsultaKardexDto } from './dto/consulta-kardex.dto.js';
 import { ConsultaSaldoDto } from './dto/consulta-saldo.dto.js';
@@ -26,6 +28,23 @@ export class PuntosController {
   @Get('kardex')
   kardex(@UsuarioActual() usuario: UsuarioAutenticado, @Query() consulta: ConsultaKardexDto) {
     return this.puntos.obtenerKardex(empresaDelUsuario(usuario, consulta.empresaId), consulta);
+  }
+
+  @RequierePermisos('puntos.exportar_kardex')
+  @Get('kardex/pdf')
+  async kardexPdf(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Query() consulta: ConsultaKardexDto,
+    @Res({ passthrough: true }) respuesta: Response,
+  ) {
+    const datos = await this.puntos.datosReporteKardex(empresaDelUsuario(usuario, consulta.empresaId), consulta);
+
+    respuesta.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="kardex-${datos.empresa.nit}.pdf"`,
+    });
+
+    return new StreamableFile(await generarReporteKardex(datos));
   }
 
   @RequierePermisos('puntos.contratar_plan', 'puntos.renovar_plan')

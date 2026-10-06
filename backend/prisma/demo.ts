@@ -2,6 +2,9 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { hash } from '@node-rs/argon2';
+import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -116,6 +119,173 @@ function proximoDia(desde: Date, diasAdelante: number, horaInicio: number): Date
   return fecha;
 }
 
+// Tickets en distintos puntos del ciclo de vida. Los cerrados descuentan de la
+// bolsa del plan y los calificados acumulan fidelidad, igual que lo haría la
+// aplicación, para que el kardex y el programa de puntos muestren historia real.
+async function crearTicketsDeEjemplo(
+  empresaId: string,
+  asesores: Array<{ id: string; usuarioId: string }>,
+) {
+  if ((await prisma.ticket.count({ where: { empresaId } })) > 0 || asesores.length === 0) {
+    return;
+  }
+
+  const [solicitante, coordinador, estados, categorias, tarifas, reglas, bolsa] = await Promise.all([
+    prisma.usuario.findUniqueOrThrow({ where: { email: 'sistemas@andina.com' } }),
+    prisma.usuario.findUniqueOrThrow({ where: { email: 'coordinador@innovasoft.com' } }),
+    prisma.estadoTicket.findMany(),
+    prisma.categoriaServicio.findMany(),
+    prisma.tarifaServicio.findMany(),
+    prisma.reglaFidelizacion.findMany(),
+    prisma.bolsaPuntos.findFirstOrThrow({ where: { empresaId, origen: 'PLAN' }, orderBy: { venceEn: 'desc' } }),
+  ]);
+
+  const estado = (clave: string) => estados.find((e) => e.clave === clave)!;
+  const categoria = (clave: string) => categorias.find((c) => c.clave === clave)!.id;
+  const tarifa = (clave: string) => tarifas.find((t) => t.clave === clave)!;
+  const regla = (evento: string) => reglas.find((r) => r.evento === evento)!;
+
+  const RECORRIDO = ['abierto', 'asignado', 'en_atencion', 'resuelto', 'cerrado'];
+
+  const plantillas = [
+    { dias: 20, estado: 'cerrado', categoria: 'falla_aplicacion', prioridad: 'ALTA' as const, titulo: 'El módulo de facturación no genera el PDF', descripcion: 'Desde el lunes, al emitir una factura el sistema muestra "Error 500" y no descarga el PDF. Afecta a todo el equipo de cartera.', horas: [1.5], solucion: 'Corrección aplicada', detalle: 'Se reinstaló la librería de generación de PDF en el servidor y se verificó la emisión de 5 facturas.', calificacion: 5 },
+    { dias: 14, estado: 'cerrado', categoria: 'configuracion', prioridad: 'MEDIA' as const, titulo: 'Configurar impresora de la bodega', descripcion: 'La impresora de etiquetas de la bodega no aparece en el sistema de inventario después del cambio de red.', horas: [0.5], solucion: 'Configuración ajustada', detalle: 'Se asignó IP fija a la impresora y se registró de nuevo en el servidor de impresión.', calificacion: 4 },
+    { dias: 9, estado: 'cerrado', categoria: 'capacitacion', prioridad: 'BAJA' as const, titulo: 'Capacitación en el nuevo módulo de compras', descripcion: 'Necesitamos una sesión para los tres auxiliares de compras sobre el flujo de órdenes y aprobaciones.', horas: [1, 0.75], solucion: 'Capacitación al usuario', detalle: 'Sesión remota de 1 hora y 45 minutos con los tres auxiliares; se entregó la guía de uso.', calificacion: 5 },
+    { dias: 6, estado: 'cerrado', categoria: 'error_datos', prioridad: 'ALTA' as const, titulo: 'Saldos de inventario descuadrados', descripcion: 'El reporte de inventario muestra existencias negativas en 12 referencias que físicamente sí están en bodega.', horas: [0.75], solucion: 'Corrección aplicada', detalle: 'Se corrigió un traslado duplicado y se recalcularon los saldos de las referencias afectadas.', calificacion: 4 },
+    { dias: 3, estado: 'resuelto', categoria: 'infraestructura', prioridad: 'MEDIA' as const, titulo: 'Lentitud en el servidor de aplicaciones', descripcion: 'En las tardes el sistema tarda más de un minuto en abrir cualquier pantalla. En la mañana funciona normal.', horas: [1, 0.5], solucion: 'Solución temporal', detalle: 'Se reprogramó la copia de seguridad que corría a las 2 p. m. Se recomienda ampliar memoria del servidor.' },
+    { dias: 2, estado: 'en_atencion', categoria: 'falla_aplicacion', prioridad: 'CRITICA' as const, titulo: 'No permite cerrar caja en el punto de venta', descripcion: 'Al intentar el cierre de caja aparece "transacción bloqueada" y no deja continuar. Tenemos dos cajas detenidas.', horas: [0.5] },
+    { dias: 1, estado: 'asignado', categoria: 'solicitud_cambio', prioridad: 'BAJA' as const, titulo: 'Agregar campo de centro de costos en requisiciones', descripcion: 'Solicitamos que el formulario de requisiciones permita elegir el centro de costos.', horas: [] },
+    { dias: 0, estado: 'abierto', categoria: 'configuracion', prioridad: 'MEDIA' as const, titulo: 'Crear usuario para nueva auxiliar contable', descripcion: 'Ingresó una auxiliar contable y necesita acceso al módulo de contabilidad con permisos de consulta.', horas: [] },
+  ];
+
+  const anio = new Date().getFullYear();
+
+  for (const [indice, p] of plantillas.entries()) {
+    const asesor = asesores[indice % asesores.length];
+    const abiertoEn = new Date(Date.now() - p.dias * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000);
+    const pasos = RECORRIDO.slice(0, RECORRIDO.indexOf(p.estado) + 1);
+    const momento = (paso: number) => new Date(abiertoEn.getTime() + paso * 40 * 60 * 1000);
+    const cerrado = p.estado === 'cerrado';
+    const horas = p.horas.reduce((t, h) => t + h, 0);
+    const aplicada = cerrado ? tarifa(horas > 1 ? 'soporte_remoto_extendido' : 'soporte_remoto_basico') : null;
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        codigo: `TCK-${anio}-${String(indice + 1).padStart(4, '0')}`,
+        empresaId,
+        solicitanteId: solicitante.id,
+        asesorId: p.estado === 'abierto' ? null : asesor.id,
+        categoriaId: categoria(p.categoria),
+        estadoId: estado(p.estado).id,
+        prioridad: p.prioridad,
+        titulo: p.titulo,
+        descripcion: p.descripcion,
+        tipoSolucion: p.solucion ?? null,
+        descripcionSolucion: p.detalle ?? null,
+        tarifaAplicadaId: aplicada?.id ?? null,
+        abiertoEn,
+        resueltoEn: pasos.includes('resuelto') ? momento(pasos.indexOf('resuelto')) : null,
+        cerradoEn: cerrado ? momento(pasos.length) : null,
+      },
+    });
+
+    for (const [paso, clave] of pasos.entries()) {
+      await prisma.ticketHistorial.create({
+        data: {
+          ticketId: ticket.id,
+          estadoAnteriorId: paso === 0 ? null : estado(pasos[paso - 1]).id,
+          estadoNuevoId: estado(clave).id,
+          usuarioId: paso === 0 ? solicitante.id : clave === 'asignado' ? coordinador.id : asesor.usuarioId,
+          comentario: paso === 0 ? 'Ticket registrado' : clave === 'resuelto' ? (p.solucion ?? null) : null,
+          createdAt: momento(paso),
+        },
+      });
+    }
+
+    for (const [n, h] of p.horas.entries()) {
+      await prisma.ticketActividad.create({
+        data: {
+          ticketId: ticket.id,
+          asesorId: asesor.id,
+          descripcion: n === 0 ? 'Diagnóstico remoto del caso' : 'Aplicación y verificación de la solución',
+          horas: h,
+          fecha: momento(2 + n * 0.5),
+        },
+      });
+    }
+
+    if (aplicada !== null) {
+      await prisma.movimientoPuntos.create({
+        data: {
+          empresaId,
+          bolsaId: bolsa.id,
+          tipo: 'CONSUMO',
+          puntos: -aplicada.puntos,
+          ticketId: ticket.id,
+          descripcion: `Ticket ${ticket.codigo} — ${aplicada.nombre}`,
+          registradoPorId: asesor.usuarioId,
+          createdAt: momento(pasos.length),
+        },
+      });
+    }
+
+    if (p.calificacion !== undefined) {
+      const carpeta = join(process.env.UPLOADS_DIR || './uploads', 'tickets', ticket.id);
+      const archivo = `${randomUUID()}.txt`;
+      const contenido = `Registro del error reportado por ${solicitante.nombres} ${solicitante.apellidos}\n\n${p.descripcion}\n`;
+
+      await mkdir(carpeta, { recursive: true });
+      await writeFile(join(carpeta, archivo), contenido);
+      await prisma.adjunto.create({
+        data: {
+          ticketId: ticket.id,
+          nombreArchivo: 'registro-del-error.txt',
+          ruta: join('tickets', ticket.id, archivo),
+          tipoMime: 'text/plain',
+          tamanoBytes: Buffer.byteLength(contenido),
+          subidoPorId: solicitante.id,
+          createdAt: momento(0.2),
+        },
+      });
+
+      await prisma.encuestaTicket.create({
+        data: { ticketId: ticket.id, calificacion: p.calificacion, respondidaEn: momento(pasos.length + 1) },
+      });
+
+      for (const evento of ['TICKET_CON_EVIDENCIA', 'ENCUESTA_RESPONDIDA']) {
+        const r = regla(evento);
+        await prisma.movimientoFidelidad.create({
+          data: {
+            empresaId,
+            tipo: 'ACUMULACION',
+            puntos: r.puntos,
+            reglaId: r.id,
+            ticketId: ticket.id,
+            descripcion: r.nombre,
+            createdAt: momento(pasos.length + 1),
+          },
+        });
+      }
+    }
+  }
+
+  // Una renovación anticipada del plan completa el saldo de fidelidad
+  // necesario para que la empresa pueda probar el canje de una recompensa.
+  const renovacion = regla('RENOVACION_ANTICIPADA');
+  await prisma.movimientoFidelidad.create({
+    data: {
+      empresaId,
+      tipo: 'ACUMULACION',
+      puntos: renovacion.puntos,
+      reglaId: renovacion.id,
+      descripcion: renovacion.nombre,
+      createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  console.log(`  ${plantillas.length} tickets de ejemplo creados`);
+}
+
 async function main() {
   console.log('Cargando datos de demostración…');
 
@@ -124,7 +294,7 @@ async function main() {
     console.log(`  ${persona.perfil.padEnd(32)} ${persona.email}`);
   }
 
-  const asesores = await prisma.asesor.findMany({ include: { usuario: true } });
+  const asesores = await prisma.asesor.findMany({ include: { usuario: true }, orderBy: { id: 'asc' } });
 
   for (const datos of EMPRESAS) {
     const empresa = await prisma.empresa.upsert({
@@ -151,7 +321,10 @@ async function main() {
     });
 
     if (yaTieneBolsa === null) {
-      const inicioEn = new Date();
+      // El plan se contrató hace 25 días: así los tickets de ejemplo consumen
+      // de una bolsa que ya existía y la bolsa queda próxima a vencer, lo que
+      // permite ver la alerta del panel.
+      const inicioEn = new Date(Date.now() - 25 * 24 * 60 * 60 * 1000);
       const finEn = new Date(inicioEn.getTime() + plan.diasVigencia * 24 * 60 * 60 * 1000);
 
       const suscripcion = await prisma.suscripcion.create({
@@ -165,6 +338,7 @@ async function main() {
           origen: 'PLAN',
           puntosIniciales: plan.puntosIncluidos ?? 0,
           esIlimitada: plan.esIlimitado,
+          emitidaEn: inicioEn,
           venceEn: finEn,
         },
       });
@@ -176,6 +350,7 @@ async function main() {
           tipo: 'EMISION',
           puntos: plan.puntosIncluidos ?? 0,
           descripcion: `Emisión por contratación del plan ${plan.nombre}`,
+          createdAt: inicioEn,
         },
       });
 
@@ -231,6 +406,8 @@ async function main() {
 
     console.log(`\n  ${plantillas.length} citas de ejemplo creadas`);
   }
+
+  await crearTicketsDeEjemplo(empresa.id, asesores);
 
   console.log(`\nTodos los usuarios de demostración usan la contraseña: ${CLAVE}`);
   console.log('El administrador de Innovasoft sigue siendo admin@innovasoft.com / Admin123*');

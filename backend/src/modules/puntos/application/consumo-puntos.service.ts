@@ -20,7 +20,7 @@ export type ResultadoConsumo = {
   cubiertoPorPlanIlimitado: boolean;
 };
 
-type ClientePrisma = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
+export type ClientePrisma = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
 
 @Injectable()
 export class ConsumoPuntosService {
@@ -33,61 +33,66 @@ export class ConsumoPuntosService {
   // la marca de una cita como realizada; ninguno de los dos escribe movimientos
   // por su cuenta.
   async consumir(solicitud: SolicitudConsumo): Promise<ResultadoConsumo> {
+    return this.prisma.$transaction((tx) => this.consumirEn(tx, solicitud));
+  }
+
+  // Variante que trabaja dentro de una transacción ya abierta. El cierre del
+  // ticket la usa para que el cambio de estado y el descuento sean una sola
+  // operación: o quedan los dos, o no queda ninguno.
+  async consumirEn(tx: ClientePrisma, solicitud: SolicitudConsumo): Promise<ResultadoConsumo> {
     const tope = this.config.getOrThrow<number>('puntos.topeDescubierto');
 
-    return this.prisma.$transaction(async (tx) => {
-      const estado = await this.estadoBloqueado(tx, solicitud.empresaId);
+    const estado = await this.estadoBloqueado(tx, solicitud.empresaId);
 
-      if (excedeElDescubierto(estado.saldo, solicitud.costo, tope)) {
-        throw new ConflictException(
-          `La empresa llegó al límite de ${tope} puntos en descubierto. ` +
-            'Debe renovar el plan o contratar una recarga antes de registrar más consumos.',
-        );
-      }
+    if (excedeElDescubierto(estado.saldo, solicitud.costo, tope)) {
+      throw new ConflictException(
+        `La empresa llegó al límite de ${tope} puntos en descubierto. ` +
+          'Debe renovar el plan o contratar una recarga antes de registrar más consumos.',
+      );
+    }
 
-      const plan = planificarConsumo(estado.bolsas, solicitud.costo);
+    const plan = planificarConsumo(estado.bolsas, solicitud.costo);
 
-      for (const aplicacion of plan.aplicaciones) {
-        await tx.movimientoPuntos.create({
-          data: {
-            empresaId: solicitud.empresaId,
-            bolsaId: aplicacion.bolsaId,
-            tipo: 'CONSUMO',
-            // Los movimientos de salida se guardan en negativo: el saldo es
-            // siempre la suma de la columna, sin condicionales.
-            puntos: -aplicacion.puntos,
-            ticketId: solicitud.ticketId ?? null,
-            citaId: solicitud.citaId ?? null,
-            descripcion: solicitud.descripcion,
-            registradoPorId: solicitud.registradoPorId ?? null,
-          },
-        });
-      }
+    for (const aplicacion of plan.aplicaciones) {
+      await tx.movimientoPuntos.create({
+        data: {
+          empresaId: solicitud.empresaId,
+          bolsaId: aplicacion.bolsaId,
+          tipo: 'CONSUMO',
+          // Los movimientos de salida se guardan en negativo: el saldo es
+          // siempre la suma de la columna, sin condicionales.
+          puntos: -aplicacion.puntos,
+          ticketId: solicitud.ticketId ?? null,
+          citaId: solicitud.citaId ?? null,
+          descripcion: solicitud.descripcion,
+          registradoPorId: solicitud.registradoPorId ?? null,
+        },
+      });
+    }
 
-      if (plan.descubierto > 0) {
-        await tx.movimientoPuntos.create({
-          data: {
-            empresaId: solicitud.empresaId,
-            bolsaId: null,
-            tipo: 'DESCUBIERTO',
-            puntos: -plan.descubierto,
-            ticketId: solicitud.ticketId ?? null,
-            citaId: solicitud.citaId ?? null,
-            descripcion: `${solicitud.descripcion} (sin saldo disponible)`,
-            registradoPorId: solicitud.registradoPorId ?? null,
-          },
-        });
-      }
+    if (plan.descubierto > 0) {
+      await tx.movimientoPuntos.create({
+        data: {
+          empresaId: solicitud.empresaId,
+          bolsaId: null,
+          tipo: 'DESCUBIERTO',
+          puntos: -plan.descubierto,
+          ticketId: solicitud.ticketId ?? null,
+          citaId: solicitud.citaId ?? null,
+          descripcion: `${solicitud.descripcion} (sin saldo disponible)`,
+          registradoPorId: solicitud.registradoPorId ?? null,
+        },
+      });
+    }
 
-      const saldoNuevo = plan.cubiertoPorPlanIlimitado ? estado.saldo : estado.saldo - solicitud.costo;
+    const saldoNuevo = plan.cubiertoPorPlanIlimitado ? estado.saldo : estado.saldo - solicitud.costo;
 
-      return {
-        saldoAnterior: estado.saldo,
-        saldoNuevo,
-        descubierto: plan.descubierto,
-        cubiertoPorPlanIlimitado: plan.cubiertoPorPlanIlimitado,
-      };
-    });
+    return {
+      saldoAnterior: estado.saldo,
+      saldoNuevo,
+      descubierto: plan.descubierto,
+      cubiertoPorPlanIlimitado: plan.cubiertoPorPlanIlimitado,
+    };
   }
 
   // Bloquea las filas de las bolsas de la empresa hasta que termine la

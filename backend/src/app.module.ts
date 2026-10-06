@@ -5,7 +5,9 @@ import { cargarConfiguracion } from './config/configuracion.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CitasModule } from './modules/citas/citas.module.js';
 import { EmpresasModule } from './modules/empresas/empresas.module.js';
+import { FidelizacionModule } from './modules/fidelizacion/fidelizacion.module.js';
 import { PuntosModule } from './modules/puntos/puntos.module.js';
+import { TicketsModule } from './modules/tickets/tickets.module.js';
 import { UsuariosModule } from './modules/usuarios/usuarios.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SaludController } from './salud/salud.controller.js';
@@ -22,7 +24,9 @@ import { PermisosGuard } from './shared/guards/permisos.guard.js';
     UsuariosModule,
     EmpresasModule,
     PuntosModule,
+    TicketsModule,
     CitasModule,
+    FidelizacionModule,
   ],
   controllers: [SaludController],
   providers: [

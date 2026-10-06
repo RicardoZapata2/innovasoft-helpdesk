@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
@@ -10,9 +10,12 @@ import { CorreoService } from '../../../shared/correo/correo.service.js';
 import type { CambioPasswordDto } from '../presentation/dto/cambio-password.dto.js';
 import type { LoginDto } from '../presentation/dto/login.dto.js';
 import type { RecuperacionDto } from '../presentation/dto/recuperacion.dto.js';
+import type { RegistroDto } from '../presentation/dto/registro.dto.js';
 import type { RestablecerPasswordDto } from '../presentation/dto/restablecer-password.dto.js';
 
 const VIGENCIA_RECUPERACION_MINUTOS = 60;
+const VIGENCIA_VERIFICACION_MINUTOS = 24 * 60;
+const PERFIL_ADMIN_EMPRESA = 'Administrador de empresa cliente';
 
 type Sesion = { accessToken: string; refreshToken: string };
 
@@ -61,6 +64,79 @@ export class AuthService {
         permisos: usuario.perfil.permisos.map((asignacion) => asignacion.permiso.clave),
         debeCambiarPassword: usuario.debeCambiarPassword,
       },
+    };
+  }
+
+  // Registro público: una empresa se da de alta sola desde el sitio. Quien se
+  // registra queda como administrador de su empresa, pero la cuenta no entra
+  // hasta confirmar el correo. Así nadie puede abrir una cuenta a nombre de un
+  // correo ajeno.
+  async registrar(datos: RegistroDto) {
+    const email = datos.email.toLowerCase();
+
+    const [nitOcupado, emailOcupado, perfil] = await Promise.all([
+      this.prisma.empresa.findUnique({ where: { nit: datos.nit } }),
+      this.prisma.usuario.findUnique({ where: { email } }),
+      this.prisma.perfil.findUnique({ where: { nombre: PERFIL_ADMIN_EMPRESA } }),
+    ]);
+
+    if (nitOcupado !== null) {
+      throw new ConflictException('Ya hay una empresa registrada con ese NIT');
+    }
+
+    if (emailOcupado !== null) {
+      throw new ConflictException('Ya hay una cuenta registrada con ese correo');
+    }
+
+    if (perfil === null) {
+      throw new InternalServerErrorException('Los perfiles iniciales no están cargados. Ejecuta npm run db:seed.');
+    }
+
+    const passwordHash = await hashPassword(datos.password);
+    const token = generarToken();
+
+    await this.prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresa.create({
+        data: { nit: datos.nit, razonSocial: datos.razonSocial.trim() },
+      });
+
+      const usuario = await tx.usuario.create({
+        data: {
+          empresaId: empresa.id,
+          perfilId: perfil.id,
+          nombres: datos.nombres.trim(),
+          apellidos: datos.apellidos.trim(),
+          email,
+          passwordHash,
+        },
+      });
+
+      await tx.tokenUsuario.create({
+        data: {
+          usuarioId: usuario.id,
+          tokenHash: hashToken(token),
+          tipo: 'VERIFICACION_EMAIL',
+          expiraEn: enMinutos(VIGENCIA_VERIFICACION_MINUTOS),
+        },
+      });
+
+      await tx.registroAuditoria.create({
+        data: {
+          usuarioId: usuario.id,
+          entidad: 'empresa_cliente',
+          entidadId: empresa.id,
+          accion: 'REGISTRO_PUBLICO',
+          datosNuevos: { nit: empresa.nit, razonSocial: empresa.razonSocial, administrador: email },
+        },
+      });
+    });
+
+    const enlace = this.enlace('verificar-email', token);
+    this.correo.enviarVerificacion(email, enlace);
+
+    return {
+      mensaje: 'Cuenta creada. Revisa tu correo para confirmarla antes de iniciar sesión.',
+      ...this.enlaceVisible(enlace),
     };
   }
 
@@ -134,6 +210,8 @@ export class AuthService {
     const email = datos.email.toLowerCase();
     const usuario = await this.prisma.usuario.findUnique({ where: { email } });
 
+    let enlace: string | null = null;
+
     if (usuario !== null && usuario.activo) {
       const token = generarToken();
 
@@ -146,13 +224,15 @@ export class AuthService {
         },
       });
 
-      this.correo.enviarRecuperacion(email, this.enlace('restablecer-password', token));
+      enlace = this.enlace('restablecer-password', token);
+      this.correo.enviarRecuperacion(email, enlace);
     }
 
     // La respuesta es la misma exista o no la cuenta, por el mismo motivo que
     // en el login.
     return {
       mensaje: 'Si el correo corresponde a una cuenta, recibirás las instrucciones',
+      ...(enlace === null ? {} : this.enlaceVisible(enlace)),
     };
   }
 
@@ -258,5 +338,13 @@ export class AuthService {
 
   private enlace(ruta: string, token: string): string {
     return `${this.config.getOrThrow<string>('corsOrigin')}/${ruta}?token=${token}`;
+  }
+
+  // El sistema no tiene servidor de correo. En el ambiente de demostración el
+  // enlace que iría en el mensaje se devuelve en la respuesta para poder
+  // completar el flujo; en producción la variable va apagada y el enlace solo
+  // viaja por correo.
+  private enlaceVisible(enlace: string): { enlace?: string } {
+    return this.config.get<boolean>('correo.mostrarEnlaces') === true ? { enlace } : {};
   }
 }

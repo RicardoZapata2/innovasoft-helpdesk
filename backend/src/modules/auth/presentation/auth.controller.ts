@@ -8,6 +8,7 @@ import { CambioPasswordDto } from './dto/cambio-password.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecuperacionDto } from './dto/recuperacion.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
+import { RegistroDto } from './dto/registro.dto.js';
 import { RestablecerPasswordDto } from './dto/restablecer-password.dto.js';
 import { VerificacionDto } from './dto/verificacion.dto.js';
 
@@ -15,6 +16,13 @@ import { VerificacionDto } from './dto/verificacion.dto.js';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Publico()
+  @HttpCode(HttpStatus.CREATED)
+  @Post('registro')
+  registrar(@Body() datos: RegistroDto) {
+    return this.auth.registrar(datos);
+  }
 
   @Publico()
   @HttpCode(HttpStatus.OK)

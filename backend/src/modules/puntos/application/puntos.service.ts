@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service.js';
+import { FidelizacionService } from '../../fidelizacion/application/fidelizacion.service.js';
+import { aplicarDescuento, elegirDescuento } from '../../fidelizacion/domain/canje.js';
 import { calcularAlertas, diasHasta } from '../domain/alertas.js';
 import type { Alerta } from '../domain/alertas.js';
 import { leerEstado } from './consumo-puntos.service.js';
+import type { DatosReporteKardex } from './reporte-kardex.js';
 import type { AjusteDto } from '../presentation/dto/ajuste.dto.js';
 import type { ContratarPlanDto } from '../presentation/dto/contratar-plan.dto.js';
 import type { ConsultaKardexDto } from '../presentation/dto/consulta-kardex.dto.js';
@@ -33,6 +36,7 @@ export class PuntosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly fidelizacion: FidelizacionService,
   ) {}
 
   listarPlanes() {
@@ -128,11 +132,43 @@ export class PuntosService {
     };
   }
 
-  async obtenerKardex(empresaId: string, consulta: ConsultaKardexDto) {
-    const pagina = consulta.pagina ?? 1;
-    const tamano = consulta.tamano ?? 20;
+  async datosReporteKardex(empresaId: string, consulta: ConsultaKardexDto): Promise<DatosReporteKardex> {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
 
-    const filtro = {
+    if (empresa === null) {
+      throw new NotFoundException('La empresa no existe');
+    }
+
+    const [estado, movimientos] = await Promise.all([
+      this.obtenerEstadoDeCuenta(empresaId),
+      this.prisma.movimientoPuntos.findMany({
+        where: this.filtroKardex(empresaId, consulta),
+        orderBy: { createdAt: 'asc' },
+        take: 2000,
+        select: {
+          tipo: true,
+          puntos: true,
+          descripcion: true,
+          createdAt: true,
+          bolsa: { select: { origen: true, venceEn: true } },
+          ticket: { select: { codigo: true } },
+          cita: { select: { codigo: true } },
+        },
+      }),
+    ]);
+
+    return {
+      empresa,
+      saldoDisponible: estado.saldoDisponible,
+      tienePlanIlimitado: estado.tienePlanIlimitado,
+      desde: consulta.desde,
+      hasta: consulta.hasta,
+      movimientos,
+    };
+  }
+
+  private filtroKardex(empresaId: string, consulta: ConsultaKardexDto) {
+    return {
       empresaId,
       ...(consulta.tipo === undefined ? {} : { tipo: consulta.tipo }),
       ...(consulta.ticketId === undefined ? {} : { ticketId: consulta.ticketId }),
@@ -145,6 +181,12 @@ export class PuntosService {
             },
           }),
     };
+  }
+
+  async obtenerKardex(empresaId: string, consulta: ConsultaKardexDto) {
+    const pagina = consulta.pagina ?? 1;
+    const tamano = consulta.tamano ?? 20;
+    const filtro = this.filtroKardex(empresaId, consulta);
 
     const [total, movimientos] = await Promise.all([
       this.prisma.movimientoPuntos.count({ where: filtro }),
@@ -161,6 +203,8 @@ export class PuntosService {
           createdAt: true,
           ticketId: true,
           citaId: true,
+          ticket: { select: { codigo: true } },
+          cita: { select: { codigo: true } },
           bolsa: { select: { id: true, origen: true, venceEn: true } },
           registradoPor: { select: { nombres: true, apellidos: true } },
         },
@@ -197,17 +241,61 @@ export class PuntosService {
 
     const origen =
       plan.tipo === 'RECARGA' ? 'RECARGA' : plan.tipo === 'BONO' ? 'BONO' : 'PLAN';
+    const esSuscripcion = plan.tipo === 'SUSCRIPCION';
 
     return this.prisma.$transaction(async (tx) => {
+      // Renovar es contratar una suscripción mientras otra sigue vigente. Eso
+      // es lo que premia la regla de renovación anticipada.
+      const vigente = esSuscripcion
+        ? await tx.suscripcion.findFirst({
+            where: { empresaId, estado: 'ACTIVA', finEn: { gt: inicioEn }, plan: { tipo: 'SUSCRIPCION' } },
+          })
+        : null;
+
+      const descuentos = esSuscripcion
+        ? await tx.canje.findMany({
+            where: {
+              empresaId,
+              estado: 'EMITIDO',
+              recompensa: { tipo: 'DESCUENTO_RENOVACION' },
+              OR: [{ venceEn: null }, { venceEn: { gt: inicioEn } }],
+            },
+            include: { recompensa: true },
+          })
+        : [];
+
+      const descuento = elegirDescuento(
+        descuentos.map((canje) => ({ id: canje.id, porcentaje: Number(canje.recompensa.valor) })),
+      );
+
+      const precioPagado =
+        descuento === null ? Number(plan.precio) : aplicarDescuento(Number(plan.precio), descuento.porcentaje);
+
       const suscripcion = await tx.suscripcion.create({
         data: {
           empresaId,
           planId: plan.id,
           inicioEn,
           finEn,
-          precioPagado: plan.precio,
+          precioPagado,
         },
       });
+
+      if (descuento !== null) {
+        await tx.canje.update({
+          where: { id: descuento.id },
+          data: { estado: 'APLICADO', aplicadoEnSuscripcionId: suscripcion.id },
+        });
+      }
+
+      const premio =
+        vigente === null
+          ? null
+          : await this.fidelizacion.otorgarEn(tx, {
+              empresaId,
+              evento: 'RENOVACION_ANTICIPADA',
+              suscripcionId: suscripcion.id,
+            });
 
       const bolsa = await tx.bolsaPuntos.create({
         data: {
@@ -238,6 +326,9 @@ export class PuntosService {
         puntosEmitidos: plan.puntosIncluidos,
         esIlimitado: plan.esIlimitado,
         venceEn: finEn,
+        precioPagado,
+        descuentoAplicado: descuento?.porcentaje ?? 0,
+        puntosFidelidadGanados: premio?.puntos ?? 0,
       };
     });
   }

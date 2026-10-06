@@ -9,6 +9,7 @@ export type Configuracion = {
     refrescoSegundos: number;
   };
   subidas: { directorio: string; maxMb: number };
+  correo: { mostrarEnlaces: boolean };
   puntos: {
     topeDescubierto: number;
     avisoSaldoBajo: number;
@@ -46,7 +47,9 @@ function aSegundos(duracion: string): number {
 export function cargarConfiguracion(): Configuracion {
   return {
     puerto: Number(process.env.PORT ?? 3000),
-    corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+    // En el servidor publicado el frontend y la API comparten dirección, que
+    // el proveedor expone en RENDER_EXTERNAL_URL.
+    corsOrigin: process.env.CORS_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173',
     baseDatos: { url: requerida('DATABASE_URL') },
     jwt: {
       accesoSecreto: requerida('JWT_ACCESS_SECRET'),
@@ -55,9 +58,10 @@ export function cargarConfiguracion(): Configuracion {
       refrescoSegundos: aSegundos(process.env.JWT_REFRESH_TTL ?? '7d'),
     },
     subidas: {
-      directorio: process.env.UPLOADS_DIR ?? './uploads',
+      directorio: process.env.UPLOADS_DIR || './uploads',
       maxMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
     },
+    correo: { mostrarEnlaces: process.env.MOSTRAR_ENLACES_CORREO === 'true' },
     puntos: {
       // Cuánto puede quedar una empresa por debajo de cero antes de que el
       // sistema deje de aceptar consumos. El servicio ya se prestó cuando se
