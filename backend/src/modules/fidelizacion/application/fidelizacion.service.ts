@@ -86,6 +86,10 @@ export class FidelizacionService {
           recompensa: { select: { nombre: true, costoPuntos: true, tipo: true } },
           usuario: { select: { nombres: true, apellidos: true } },
           bolsaGenerada: { select: { id: true, puntosIniciales: true, venceEn: true } },
+          // Lo que costó de verdad sale del movimiento del canje: el precio de la
+          // recompensa en el catálogo puede haber cambiado después.
+          movimientos: { where: { tipo: 'CANJE' }, select: { puntos: true } },
+          citaCubierta: { select: { id: true, codigo: true } },
         },
       }),
       this.prisma.recompensa.findMany({

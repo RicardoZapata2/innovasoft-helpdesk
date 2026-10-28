@@ -2,7 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './componentes/Layout';
 import { RutaProtegida } from './componentes/RutaProtegida';
 import { Asesores } from './paginas/Asesores';
+import { Auditoria } from './paginas/Auditoria';
 import { CambiarPassword } from './paginas/CambiarPassword';
+import { Catalogo } from './paginas/Catalogo';
 import { Citas } from './paginas/Citas';
 import { Empresas } from './paginas/Empresas';
 import { Entrar } from './paginas/Entrar';
@@ -19,6 +21,12 @@ import { Usuarios } from './paginas/Usuarios';
 import { VerificarEmail } from './paginas/VerificarEmail';
 
 const VER_TICKETS = ['tickets.ver_todos', 'tickets.ver_empresa', 'tickets.ver_propios'];
+const ADMINISTRAR_CATALOGO = [
+  'puntos.administrar_planes',
+  'puntos.administrar_tarifas',
+  'fidelizacion.administrar_recompensas',
+  'fidelizacion.administrar_reglas',
+];
 
 export function App() {
   return (
@@ -76,6 +84,18 @@ export function App() {
       <Route element={<RutaProtegida permisos={['citas.administrar_disponibilidad']} />}>
         <Route element={<Layout />}>
           <Route path="/asesores" element={<Asesores />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={ADMINISTRAR_CATALOGO} />}>
+        <Route element={<Layout />}>
+          <Route path="/catalogo" element={<Catalogo />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={['auditoria.ver']} />}>
+        <Route element={<Layout />}>
+          <Route path="/auditoria" element={<Auditoria />} />
         </Route>
       </Route>
 

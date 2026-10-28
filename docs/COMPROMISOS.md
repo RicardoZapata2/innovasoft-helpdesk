@@ -50,17 +50,17 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` terminado y verificado
 - [x] Panel de saldo con total disponible y desglose por bolsa con fecha de vencimiento
 - [x] Alerta visual cuando una bolsa está próxima a expirar
 - [x] Kardex de movimientos paginado
-- [~] Filtros por rango de fechas, tipo de movimiento y ticket asociado
+- [x] Filtros por rango de fechas, tipo de movimiento y ticket asociado
 - [x] Exportación del kardex a PDF
 
 ### Backend
-- [~] Catálogo de planes y tarifas administrable
+- [x] Catálogo de planes y tarifas administrable
 - [x] Contratación que crea la suscripción y emite la bolsa con su vencimiento
 - [x] **Consumo por vencimiento más próximo** (no FIFO por fecha de compra)
 - [x] Consumo parcial multi-bolsa: un movimiento por cada bolsa afectada
-- [~] Saldo en descubierto permitido, marcado como pendiente y trasladado al siguiente periodo de facturación
+- [x] Saldo en descubierto permitido, marcado como pendiente y trasladado al siguiente periodo de facturación
 - [x] Transacción con bloqueo de filas (`SELECT FOR UPDATE`) contra doble consumo
-- [~] Proceso de cierre de periodo que expira bolsas vencidas y consolida el saldo pendiente
+- [x] Proceso de cierre de periodo que expira bolsas vencidas y consolida el saldo pendiente
 
 ### Base de datos
 - [x] Entidades: `plan`, `tarifa_servicio`, `suscripcion`, `bolsa_puntos`, `movimiento_puntos`, `periodo_facturacion`
@@ -72,12 +72,12 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` terminado y verificado
 ## F3 — Agendamiento de citas y visitas técnicas
 
 ### Frontend
-- [~] Calendario en vista mensual y semanal, filtrado según el perfil
+- [x] Calendario en vista mensual y semanal, filtrado según el perfil
 - [x] Selector de franjas disponibles calculadas por asesor
 - [x] Formulario con empresa, asesor, fecha, hora, modalidad, dirección o enlace
-- [~] Carga de evidencias en la cita
-- [~] Vinculación opcional a un ticket existente
-- [~] Reprogramación y cancelación con registro del motivo
+- [x] Carga de evidencias en la cita
+- [x] Vinculación opcional a un ticket existente
+- [x] Reprogramación y cancelación con registro del motivo
 
 ### Backend
 - [x] Cálculo de franjas que cruza disponibilidad declarada con citas confirmadas
@@ -111,8 +111,9 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` terminado y verificado
 
 ### Backend
 - [x] Motor de reglas que evalúa eventos y emite puntos registrando su origen
-- [~] Catálogo administrable por Innovasoft con costo, vigencia y disponibilidad
+- [x] Catálogo administrable por Innovasoft con costo, vigencia y disponibilidad
 - [x] Canje que valida saldo, descuenta, emite el beneficio y deja trazabilidad del vínculo
+- [x] La visita sin consumo se usa al agendar una cita presencial; cancelar la cita devuelve el beneficio
 
 ### Base de datos
 - [x] Entidades: `regla_fidelizacion`, `movimiento_fidelidad`, `recompensa`, `canje`
@@ -150,6 +151,6 @@ Casos límite que deben tener prueba automatizada:
 - [x] Consumo con saldo insuficiente (debe permitir descubierto, no reventar)
 - [x] Consumo contra una bolsa vencida (debe ignorarla)
 - [x] Consumo que atraviesa varias bolsas (un movimiento por bolsa)
-- [~] Dos cierres simultáneos sobre la misma bolsa (no debe haber doble gasto)
+- [x] Dos cierres simultáneos sobre la misma bolsa (no debe haber doble gasto)
 - [x] Cita en horario ya ocupado por el mismo asesor (debe rechazarse)
 - [x] Acceso a datos de otra empresa (debe rechazarse)

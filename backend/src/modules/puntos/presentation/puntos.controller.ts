@@ -5,6 +5,7 @@ import { RequierePermisos } from '../../../shared/decoradores/permisos.decorator
 import { UsuarioActual } from '../../../shared/decoradores/usuario-actual.decorator.js';
 import { empresaDelUsuario } from '../../../shared/seguridad/empresa-del-usuario.js';
 import type { UsuarioAutenticado } from '../../../shared/tipos/usuario-autenticado.js';
+import { CierrePeriodoService } from '../application/cierre-periodo.service.js';
 import { PuntosService } from '../application/puntos.service.js';
 import { generarReporteKardex } from '../application/reporte-kardex.js';
 import { AjusteDto } from './dto/ajuste.dto.js';
@@ -16,7 +17,10 @@ import { ContratarPlanDto } from './dto/contratar-plan.dto.js';
 @ApiTags('puntos')
 @Controller('puntos')
 export class PuntosController {
-  constructor(private readonly puntos: PuntosService) {}
+  constructor(
+    private readonly puntos: PuntosService,
+    private readonly cierre: CierrePeriodoService,
+  ) {}
 
   @RequierePermisos('puntos.ver_saldo_empresa', 'puntos.ver_saldo_todos')
   @Get('saldo')
@@ -51,6 +55,21 @@ export class PuntosController {
   @Post('contratar')
   contratar(@UsuarioActual() usuario: UsuarioAutenticado, @Body() datos: ContratarPlanDto) {
     return this.puntos.contratarPlan(empresaDelUsuario(usuario, datos.empresaId), datos, usuario.id);
+  }
+
+  @RequierePermisos('puntos.ver_kardex')
+  @Get('periodos')
+  periodos(@UsuarioActual() usuario: UsuarioAutenticado, @Query() consulta: ConsultaSaldoDto) {
+    return this.cierre.listar(empresaDelUsuario(usuario, consulta.empresaId));
+  }
+
+  // Expira las bolsas vencidas y consolida el descubierto del periodo. Es una
+  // operación de Innovasoft, no del cliente: por eso tiene un permiso propio.
+  @RequierePermisos('puntos.cerrar_periodo')
+  @HttpCode(HttpStatus.CREATED)
+  @Post('periodos/cerrar')
+  cerrarPeriodo(@UsuarioActual() usuario: UsuarioAutenticado, @Body() datos: ConsultaSaldoDto) {
+    return this.cierre.cerrar(empresaDelUsuario(usuario, datos.empresaId), usuario.id);
   }
 
   @RequierePermisos('puntos.ajustar_saldo')

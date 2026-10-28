@@ -34,4 +34,10 @@ export class CrearCitaDto {
   @IsOptional()
   @IsUUID('4')
   empresaId?: string;
+
+  // Canje de fidelización que cubre la visita: si viene, la cita no descuenta
+  // puntos del plan cuando se marque realizada.
+  @IsOptional()
+  @IsUUID('4', { message: 'El beneficio elegido no es válido' })
+  canjeId?: string;
 }

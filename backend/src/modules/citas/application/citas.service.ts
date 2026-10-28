@@ -6,9 +6,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import type { UsuarioAutenticado } from '../../../shared/tipos/usuario-autenticado.js';
 import { ConsumoPuntosService } from '../../puntos/application/consumo-puntos.service.js';
+import type { ArchivoSubido } from '../../tickets/application/tickets.service.js';
+import { TIPOS_PERMITIDOS, validarAdjunto } from '../../tickets/domain/reglas-ticket.js';
 import { calcularFranjasLibres, estaDentroDelPlazo, seSolapan } from '../domain/agenda.js';
 import { componerCodigoCita } from '../domain/codigo-cita.js';
 import { permisoDeTransicion, transicionPermitida } from '../domain/estados-cita.js';
@@ -113,9 +119,27 @@ export class CitasService {
       }
     }
 
+    if (datos.canjeId !== undefined) {
+      await this.verificarBeneficio(empresaId, datos.canjeId, modalidad.clave);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await this.bloquearAgendaDelAsesor(tx, asesor.id);
       await this.verificarSinSolape(tx, asesor.id, { inicio: inicioEn, fin: finEn });
+
+      // El beneficio se marca como aplicado en la misma transacción que crea la
+      // cita, y solo si sigue emitido: dos solicitudes que intenten usar el
+      // mismo canje a la vez no pueden quedarse las dos con él.
+      if (datos.canjeId !== undefined) {
+        const tomado = await tx.canje.updateMany({
+          where: { id: datos.canjeId, estado: 'EMITIDO' },
+          data: { estado: 'APLICADO' },
+        });
+
+        if (tomado.count === 0) {
+          throw new ConflictException('Ese beneficio ya se usó en otra cita');
+        }
+      }
 
       return tx.cita.create({
         data: {
@@ -131,9 +155,25 @@ export class CitasService {
           direccion: datos.direccion ?? null,
           enlace: datos.enlace ?? null,
           tarifaAplicadaId: modalidad.tarifaPorDefectoId,
+          cubiertaPorCanjeId: datos.canjeId ?? null,
         },
         include: this.detalle(),
       });
+    });
+  }
+
+  // Beneficios de fidelización que la empresa todavía puede usar para cubrir
+  // una visita: canjes de tipo "servicio sin consumo" emitidos y vigentes.
+  async beneficiosDisponibles(empresaId: string) {
+    return this.prisma.canje.findMany({
+      where: {
+        empresaId,
+        estado: 'EMITIDO',
+        recompensa: { tipo: 'SERVICIO_SIN_CONSUMO' },
+        OR: [{ venceEn: null }, { venceEn: { gt: new Date() } }],
+      },
+      orderBy: { venceEn: 'asc' },
+      select: { id: true, venceEn: true, recompensa: { select: { nombre: true } } },
     });
   }
 
@@ -184,6 +224,105 @@ export class CitasService {
     }
 
     return cita;
+  }
+
+  // Lo que muestra la ficha de la cita: además de sus datos, las evidencias y
+  // la historia de cambios, que sale de la bitácora de auditoría. Así el motivo
+  // de cada reprogramación o cancelación queda a la vista sin duplicarlo.
+  async ficha(id: string, empresaId?: string) {
+    const cita = await this.obtener(id, empresaId);
+
+    const [adjuntos, historial] = await Promise.all([
+      this.prisma.adjunto.findMany({
+        where: { citaId: cita.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          nombreArchivo: true,
+          tipoMime: true,
+          tamanoBytes: true,
+          createdAt: true,
+          subidoPor: { select: { nombres: true, apellidos: true } },
+        },
+      }),
+      this.prisma.registroAuditoria.findMany({
+        where: { entidad: 'cita', entidadId: cita.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          accion: true,
+          datosAnteriores: true,
+          datosNuevos: true,
+          createdAt: true,
+          usuario: { select: { nombres: true, apellidos: true } },
+        },
+      }),
+    ]);
+
+    return { ...cita, adjuntos, historial };
+  }
+
+  async subirAdjunto(id: string, archivo: ArchivoSubido | undefined, usuario: UsuarioAutenticado, empresaId?: string) {
+    if (archivo === undefined) {
+      throw new BadRequestException('No se recibió ningún archivo');
+    }
+
+    const cita = await this.obtener(id, empresaId);
+
+    if (cita.estado.clave === 'cancelada') {
+      throw new ConflictException('No se adjuntan evidencias a una cita cancelada');
+    }
+
+    const error = validarAdjunto(archivo.mimetype, archivo.size, this.config.getOrThrow<number>('subidas.maxMb'));
+
+    if (error !== null) {
+      throw new BadRequestException(error);
+    }
+
+    // Igual que en los tickets: el archivo se guarda con un nombre generado y
+    // nunca con el original, para que no pueda escribir fuera de su carpeta.
+    const carpeta = resolve(this.config.getOrThrow<string>('subidas.directorio'), 'citas', cita.id);
+    const nombreEnDisco = `${randomUUID()}.${TIPOS_PERMITIDOS[archivo.mimetype]}`;
+
+    await mkdir(carpeta, { recursive: true });
+    await writeFile(join(carpeta, nombreEnDisco), archivo.buffer);
+
+    await this.prisma.$transaction(async (tx) => {
+      const adjunto = await tx.adjunto.create({
+        data: {
+          citaId: cita.id,
+          nombreArchivo: archivo.originalname.slice(0, 200),
+          ruta: join('citas', cita.id, nombreEnDisco),
+          tipoMime: archivo.mimetype,
+          tamanoBytes: archivo.size,
+          subidoPorId: usuario.id,
+        },
+      });
+
+      await tx.registroAuditoria.create({
+        data: {
+          usuarioId: usuario.id,
+          entidad: 'cita',
+          entidadId: cita.id,
+          accion: 'SUBIR_EVIDENCIA',
+          datosNuevos: { adjuntoId: adjunto.id, archivo: adjunto.nombreArchivo },
+        },
+      });
+    });
+
+    return this.ficha(cita.id, empresaId);
+  }
+
+  async adjunto(id: string, adjuntoId: string, empresaId?: string) {
+    const cita = await this.obtener(id, empresaId);
+    const adjunto = await this.prisma.adjunto.findFirst({ where: { id: adjuntoId, citaId: cita.id } });
+    const ruta = adjunto === null ? null : resolve(this.config.getOrThrow<string>('subidas.directorio'), adjunto.ruta);
+
+    if (adjunto === null || ruta === null || !existsSync(ruta)) {
+      throw new NotFoundException('El archivo no existe o ya no está disponible en el servidor');
+    }
+
+    return { ruta, nombre: adjunto.nombreArchivo, tipoMime: adjunto.tipoMime };
   }
 
   async reprogramar(id: string, datos: ReprogramarCitaDto, usuario: UsuarioAutenticado, empresaId?: string) {
@@ -261,11 +400,21 @@ export class CitasService {
         },
       });
 
+      // Cancelar devuelve el beneficio de fidelización que cubría la visita,
+      // para que la empresa lo pueda usar en otra. Si el cliente simplemente no
+      // asiste, el beneficio se pierde.
+      const liberaBeneficio = destino === 'cancelada' && cita.cubiertaPorCanjeId !== null;
+
+      if (liberaBeneficio) {
+        await tx.canje.update({ where: { id: cita.cubiertaPorCanjeId! }, data: { estado: 'EMITIDO' } });
+      }
+
       return tx.cita.update({
         where: { id: cita.id },
         data: {
           estadoId: estadoDestino.id,
           motivoCancelacion: destino === 'cancelada' ? (datos.motivo ?? null) : cita.motivoCancelacion,
+          ...(liberaBeneficio ? { cubiertaPorCanjeId: null } : {}),
         },
         include: this.detalle(),
       });
@@ -313,9 +462,34 @@ export class CitasService {
     return { cubiertaPorRecompensa: false, puntos: tarifa.puntos, ...resultado };
   }
 
+  private async verificarBeneficio(empresaId: string, canjeId: string, modalidad: string): Promise<void> {
+    const canje = await this.prisma.canje.findUnique({
+      where: { id: canjeId },
+      include: { recompensa: { select: { tipo: true } } },
+    });
+
+    if (canje === null || canje.empresaId !== empresaId || canje.recompensa.tipo !== 'SERVICIO_SIN_CONSUMO') {
+      throw new NotFoundException('El beneficio no existe o no pertenece a esta empresa');
+    }
+
+    if (canje.estado !== 'EMITIDO') {
+      throw new ConflictException('Ese beneficio ya se usó en otra cita');
+    }
+
+    if (canje.venceEn !== null && canje.venceEn.getTime() <= Date.now()) {
+      throw new ConflictException('Ese beneficio ya venció');
+    }
+
+    if (modalidad !== 'presencial') {
+      throw new BadRequestException('El beneficio cubre una visita presencial, no una sesión remota');
+    }
+  }
+
   private verificarTransicion(desde: ClaveEstadoCita, hasta: ClaveEstadoCita, usuario: UsuarioAutenticado): void {
     if (!transicionPermitida(desde, hasta)) {
-      throw new ConflictException(`Una cita en estado "${desde}" no puede pasar a "${hasta}"`);
+      throw new ConflictException(
+        `Una cita en estado "${desde.replace('_', ' ')}" no puede pasar a "${hasta.replace('_', ' ')}"`,
+      );
     }
 
     const permiso = permisoDeTransicion(desde, hasta);
@@ -392,6 +566,9 @@ export class CitasService {
       empresa: { select: { id: true, razonSocial: true } },
       asesor: { select: { id: true, usuario: { select: { nombres: true, apellidos: true, email: true } } } },
       solicitante: { select: { nombres: true, apellidos: true, email: true } },
+      ticket: { select: { id: true, codigo: true, titulo: true } },
+      cubiertaPorCanje: { select: { id: true, recompensa: { select: { nombre: true } } } },
+      _count: { select: { adjuntos: true } },
     };
   }
 }

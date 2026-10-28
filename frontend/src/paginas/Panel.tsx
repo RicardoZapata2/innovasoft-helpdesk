@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Aviso, Boton, Cargando, Etiqueta, Seleccion, Tarjeta, Vacio } from '../componentes/base';
+import { Aviso, Boton, Cargando, Dialogo, Etiqueta, Seleccion, Tarjeta, Vacio } from '../componentes/base';
 import { api } from '../lib/api';
-import { fechaCorta, fechaLarga, puntos } from '../lib/formato';
+import { fechaCorta, fechaLarga, pesos, puntos } from '../lib/formato';
 import { useSesion } from '../lib/sesion';
 import type { Cita, Empresa, EstadoDeCuenta, ListaCitas, ListaTickets, Plan, Satisfaccion } from '../lib/tipos';
 
@@ -38,9 +38,14 @@ export function Panel() {
 }
 
 function ProximasCitas({ consulta, titulo }: { consulta: string; titulo: string }) {
+  // Solo lo que viene: desde el inicio del día de hoy en adelante.
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const filtro = `${consulta}&desde=${hoy.toISOString()}`;
+
   const citas = useQuery({
-    queryKey: ['citas', 'panel', consulta],
-    queryFn: () => api.get<ListaCitas>(`/citas?${consulta}`),
+    queryKey: ['citas', 'panel', filtro],
+    queryFn: () => api.get<ListaCitas>(`/citas?${filtro}`),
   });
 
   return (
@@ -53,7 +58,7 @@ function ProximasCitas({ consulta, titulo }: { consulta: string; titulo: string 
       }
     >
       {citas.isPending && <Cargando />}
-      {citas.data?.citas.length === 0 && <Vacio texto="No hay citas agendadas." />}
+      {citas.data?.citas.length === 0 && <Vacio texto="No hay citas próximas." />}
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {citas.data?.citas.map((cita: Cita) => (
           <li key={cita.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
@@ -65,7 +70,9 @@ function ProximasCitas({ consulta, titulo }: { consulta: string; titulo: string 
                 {fechaLarga(cita.inicioEn)} · {cita.asesor.usuario.nombres} {cita.asesor.usuario.apellidos}
               </p>
             </div>
-            <Etiqueta texto={cita.estado.nombre} color={cita.estado.esFinal ? 'slate' : 'azul'} />
+            <Link to={`/citas?cita=${cita.id}`}>
+              <Etiqueta texto={cita.estado.nombre} color={cita.estado.esFinal ? 'slate' : 'azul'} />
+            </Link>
           </li>
         ))}
       </ul>
@@ -220,19 +227,29 @@ function PanelInnovasoft() {
 }
 
 function PanelCliente() {
+  const { puede } = useSesion();
   const clienteQuery = useQueryClient();
   const [plan, setPlan] = useState('profesional');
+  const [confirmando, setConfirmando] = useState(false);
 
   const saldo = useQuery({ queryKey: ['saldo'], queryFn: () => api.get<EstadoDeCuenta>('/puntos/saldo') });
   const planes = useQuery({ queryKey: ['planes'], queryFn: () => api.publico<Plan[]>('/planes') });
 
   const contratar = useMutation({
-    mutationFn: () => api.post('/puntos/contratar', { plan }),
+    mutationFn: () =>
+      api.post<{ plan: string; precioPagado: number; descuentoAplicado: number; puntosFidelidadGanados: number }>(
+        '/puntos/contratar',
+        { plan },
+      ),
     onSuccess: () => {
+      setConfirmando(false);
       void clienteQuery.invalidateQueries({ queryKey: ['saldo'] });
       void clienteQuery.invalidateQueries({ queryKey: ['kardex'] });
+      void clienteQuery.invalidateQueries({ queryKey: ['fidelizacion'] });
     },
   });
+
+  const elegido = planes.data?.find((opcion) => opcion.clave === plan);
 
   return (
     <>
@@ -261,6 +278,12 @@ function PanelCliente() {
                   ? 'Plan ilimitado vigente'
                   : `puntos de servicio · descubierto máximo ${saldo.data.topeDescubierto}`}
               </p>
+              {saldo.data.descubiertoPendiente > 0 && (
+                <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-200">
+                  {puntos(saldo.data.descubiertoPendiente)} consumidos sin saldo quedan pendientes. Se cobran de
+                  tus bolsas al cerrar el periodo de facturación.
+                </p>
+              )}
             </>
           )}
         </Tarjeta>
@@ -311,6 +334,7 @@ function PanelCliente() {
         </Tarjeta>
       </div>
 
+      {puede('puntos.contratar_plan', 'puntos.renovar_plan') && (
       <Tarjeta titulo="Contratar o renovar">
         <div className="flex flex-wrap items-end gap-4">
           <div className="min-w-56 flex-1">
@@ -323,19 +347,42 @@ function PanelCliente() {
               ))}
             </Seleccion>
           </div>
-          <Boton onClick={() => contratar.mutate()} disabled={contratar.isPending}>
+          <Boton onClick={() => setConfirmando(true)} disabled={contratar.isPending || elegido === undefined}>
             {contratar.isPending ? 'Contratando…' : 'Contratar'}
           </Boton>
         </div>
         {contratar.isSuccess && (
-          <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
-            Plan contratado. La bolsa de puntos ya está disponible.
-          </p>
+          <div className="mt-4">
+            <Aviso tipo="exito">
+              Plan {contratar.data.plan} contratado por {pesos(String(contratar.data.precioPagado))}
+              {contratar.data.descuentoAplicado > 0 && ` (con ${contratar.data.descuentoAplicado} % de descuento por tu canje)`}.
+              La bolsa de puntos ya está disponible
+              {contratar.data.puntosFidelidadGanados > 0 &&
+                ` y ganaste ${contratar.data.puntosFidelidadGanados} puntos de fidelidad por renovar antes de tiempo`}
+              .
+            </Aviso>
+          </div>
         )}
         {contratar.isError && (
-          <p className="mt-3 text-sm text-red-700 dark:text-red-400">{(contratar.error as Error).message}</p>
+          <div className="mt-4">
+            <Aviso tipo="error">{(contratar.error as Error).message}</Aviso>
+          </div>
+        )}
+
+        {confirmando && elegido !== undefined && (
+          <Dialogo
+            titulo={`¿Contratar el plan ${elegido.nombre}?`}
+            descripcion={`Valor: ${pesos(elegido.precio)}. ${
+              elegido.esIlimitado ? 'Servicios ilimitados' : `Recibes ${elegido.puntosIncluidos} puntos`
+            } con vigencia de ${elegido.diasVigencia} días. Si tienes un descuento canjeado en fidelización, se aplica automáticamente.`}
+            textoConfirmar="Contratar"
+            ocupado={contratar.isPending}
+            onConfirmar={() => contratar.mutate()}
+            onCancelar={() => setConfirmando(false)}
+          />
         )}
       </Tarjeta>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ResumenTickets titulo="Solicitudes de soporte" />

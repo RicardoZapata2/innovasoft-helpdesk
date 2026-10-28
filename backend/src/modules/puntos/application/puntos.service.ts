@@ -27,6 +27,7 @@ export type EstadoDeCuenta = {
   saldoDisponible: number;
   tienePlanIlimitado: boolean;
   topeDescubierto: number;
+  descubiertoPendiente: number;
   bolsas: DetalleBolsa[];
   alertas: Alerta[];
 };
@@ -113,11 +114,19 @@ export class PuntosService {
 
     const topeDescubierto = this.config.getOrThrow<number>('puntos.topeDescubierto');
 
+    // Lo consumido sin saldo queda marcado como pendiente hasta el cierre del
+    // periodo, que lo cobra de las bolsas vigentes o lo traslada al siguiente.
+    const pendientes = await this.prisma.movimientoPuntos.aggregate({
+      where: { empresaId, bolsaId: null, periodoId: null },
+      _sum: { puntos: true },
+    });
+
     return {
       empresaId,
       saldoDisponible: estado.saldo,
       tienePlanIlimitado: estado.bolsas.some((bolsa) => bolsa.esIlimitada),
       topeDescubierto,
+      descubiertoPendiente: Math.max(0, -(pendientes._sum.puntos ?? 0)),
       bolsas: detalle,
       alertas: calcularAlertas(
         estado.saldo,

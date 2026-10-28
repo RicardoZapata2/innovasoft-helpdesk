@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { cargarConfiguracion } from './config/configuracion.js';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CitasModule } from './modules/citas/citas.module.js';
 import { EmpresasModule } from './modules/empresas/empresas.module.js';
@@ -27,6 +28,7 @@ import { PermisosGuard } from './shared/guards/permisos.guard.js';
     TicketsModule,
     CitasModule,
     FidelizacionModule,
+    AuditoriaModule,
   ],
   controllers: [SaludController],
   providers: [

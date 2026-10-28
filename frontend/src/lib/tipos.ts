@@ -54,6 +54,7 @@ export type EstadoDeCuenta = {
   saldoDisponible: number;
   tienePlanIlimitado: boolean;
   topeDescubierto: number;
+  descubiertoPendiente: number;
   bolsas: Bolsa[];
   alertas: Alerta[];
 };
@@ -99,15 +100,105 @@ export type Cita = {
   direccion: string | null;
   enlace: string | null;
   motivoCancelacion: string | null;
+  createdAt: string;
   estado: { clave: string; nombre: string; esFinal: boolean };
   modalidad: { clave: string; nombre: string };
   tarifaAplicada: { clave: string; nombre: string; puntos: number } | null;
   empresa: { id: string; razonSocial: string };
   asesor: { id: string; usuario: { nombres: string; apellidos: string; email: string } };
   solicitante: { nombres: string; apellidos: string; email: string };
+  ticket: { id: string; codigo: string; titulo: string } | null;
+  cubiertaPorCanje: { id: string; recompensa: { nombre: string } } | null;
+  _count: { adjuntos: number };
 };
 
 export type ListaCitas = Pagina & { citas: Cita[] };
+
+export type FichaCita = Cita & {
+  adjuntos: Array<{
+    id: string;
+    nombreArchivo: string;
+    tipoMime: string;
+    tamanoBytes: number;
+    createdAt: string;
+    subidoPor: { nombres: string; apellidos: string };
+  }>;
+  historial: Array<{
+    id: string;
+    accion: string;
+    datosAnteriores: Record<string, unknown> | null;
+    datosNuevos: Record<string, unknown> | null;
+    createdAt: string;
+    usuario: { nombres: string; apellidos: string } | null;
+  }>;
+};
+
+export type BeneficioDisponible = {
+  id: string;
+  venceEn: string | null;
+  recompensa: { nombre: string };
+};
+
+export type Periodo = {
+  id: string;
+  inicioEn: string;
+  finEn: string;
+  estado: 'ABIERTO' | 'CERRADO';
+  saldoPendiente: number;
+  cerradoEn: string | null;
+  _count: { movimientos: number };
+};
+
+export type ResultadoCierre = {
+  periodoId: string;
+  inicioEn: string;
+  finEn: string;
+  puntosExpirados: number;
+  bolsasExpiradas: number;
+  descubiertoDelPeriodo: number;
+  cobradoDeBolsas: number;
+  trasladado: number;
+};
+
+export type PlanAdministrado = Omit<Plan, 'precio'> & {
+  id: string;
+  precio: string;
+  activo: boolean;
+  _count: { suscripciones: number };
+};
+
+export type TarifaAdministrada = Tarifa & {
+  id: string;
+  activo: boolean;
+  modalidades: Array<{ nombre: string }>;
+};
+
+export type RecompensaAdministrada = Omit<Recompensa, 'diasVigenciaBeneficio'> & {
+  id: string;
+  valor: string;
+  diasVigenciaBeneficio: number | null;
+  activa: boolean;
+  _count: { canjes: number };
+};
+
+export type ReglaAdministrada = ReglaFidelizacion & {
+  id: string;
+  activa: boolean;
+  _count: { movimientos: number };
+};
+
+export type RegistroAuditoria = {
+  id: string;
+  entidad: string;
+  entidadId: string;
+  accion: string;
+  datosAnteriores: unknown;
+  datosNuevos: unknown;
+  createdAt: string;
+  usuario: { nombres: string; apellidos: string; email: string } | null;
+};
+
+export type ListaAuditoria = Pagina & { entidades: string[]; registros: RegistroAuditoria[] };
 
 export type Franja = { inicio: string; fin: string };
 
@@ -287,6 +378,8 @@ export type ResumenFidelizacion = {
     recompensa: { nombre: string; costoPuntos: number; tipo: string };
     usuario: Persona;
     bolsaGenerada: { id: string; puntosIniciales: number; venceEn: string } | null;
+    movimientos: Array<{ puntos: number }>;
+    citaCubierta: { id: string; codigo: string } | null;
   }>;
   recompensas: Recompensa[];
   reglas: ReglaFidelizacion[];

@@ -1,13 +1,32 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { createReadStream } from 'node:fs';
 import { RequierePermisos } from '../../../shared/decoradores/permisos.decorator.js';
 import { UsuarioActual } from '../../../shared/decoradores/usuario-actual.decorator.js';
 import { empresaDelUsuario } from '../../../shared/seguridad/empresa-del-usuario.js';
 import type { UsuarioAutenticado } from '../../../shared/tipos/usuario-autenticado.js';
+import type { ArchivoSubido } from '../../tickets/application/tickets.service.js';
 import { CitasService } from '../application/citas.service.js';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto.js';
 import { ConsultaCitasDto } from './dto/consulta-citas.dto.js';
 import { ConsultaFranjasDto } from './dto/consulta-franjas.dto.js';
+import { ConsultaSaldoDto } from '../../puntos/presentation/dto/consulta-saldo.dto.js';
 import { CrearCitaDto } from './dto/crear-cita.dto.js';
 import { ReprogramarCitaDto } from './dto/reprogramar-cita.dto.js';
 
@@ -21,6 +40,12 @@ export class CitasController {
   @Get('franjas')
   franjas(@Query() consulta: ConsultaFranjasDto) {
     return this.citas.franjasDisponibles(consulta);
+  }
+
+  @RequierePermisos('citas.crear')
+  @Get('beneficios')
+  beneficios(@UsuarioActual() usuario: UsuarioAutenticado, @Query() consulta: ConsultaSaldoDto) {
+    return this.citas.beneficiosDisponibles(empresaDelUsuario(usuario, consulta.empresaId));
   }
 
   @RequierePermisos('citas.crear')
@@ -46,7 +71,40 @@ export class CitasController {
   @RequierePermisos('citas.ver_todas', 'citas.ver_empresa', 'citas.ver_propias')
   @Get(':id')
   obtener(@UsuarioActual() usuario: UsuarioAutenticado, @Param('id', ParseUUIDPipe) id: string) {
-    return this.citas.obtener(id, usuario.ambito === 'INNOVASOFT' ? undefined : empresaDelUsuario(usuario));
+    return this.citas.ficha(id, this.ambito(usuario));
+  }
+
+  // Suben evidencias tanto el cliente (fotos del problema antes de la visita)
+  // como el asesor (constancia de lo que hizo al terminarla).
+  @RequierePermisos('citas.crear', 'citas.marcar_realizada')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('archivo', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  @HttpCode(HttpStatus.CREATED)
+  @Post(':id/adjuntos')
+  subirAdjunto(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() archivo: ArchivoSubido | undefined,
+  ) {
+    return this.citas.subirAdjunto(id, archivo, usuario, this.ambito(usuario));
+  }
+
+  @RequierePermisos('citas.ver_todas', 'citas.ver_empresa', 'citas.ver_propias')
+  @Get(':id/adjuntos/:adjuntoId')
+  async descargarAdjunto(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('adjuntoId', ParseUUIDPipe) adjuntoId: string,
+    @Res({ passthrough: true }) respuesta: Response,
+  ) {
+    const archivo = await this.citas.adjunto(id, adjuntoId, this.ambito(usuario));
+
+    respuesta.set({
+      'Content-Type': archivo.tipoMime,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(archivo.nombre)}"`,
+    });
+
+    return new StreamableFile(createReadStream(archivo.ruta));
   }
 
   @RequierePermisos('citas.confirmar')

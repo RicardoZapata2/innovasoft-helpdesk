@@ -23,8 +23,13 @@ La plataforma centraliza cuatro procesos:
 
 1. **Gestión de tickets** — ciclo de vida completo, evidencias, registro de horas y reporte de cierre.
 2. **Planes y puntos** — contratación, vigencia de bolsas, descuento automático y kardex de movimientos.
-3. **Agendamiento** — calendario de visitas con control de disponibilidad.
+3. **Agendamiento** — calendario mensual y semanal, franjas libres por asesor, evidencias
+   y reprogramación con motivo.
 4. **Fidelización** — puntos ganados por actividad, canjeables por beneficios.
+
+Innovasoft administra desde la aplicación el catálogo comercial (planes, tarifas,
+recompensas y reglas), cierra los periodos de facturación y consulta la bitácora de
+auditoría.
 
 ## Tecnologías
 
@@ -85,7 +90,7 @@ y la documentación interactiva de la API en `http://localhost:3000/api/docs`.
 ```bash
 cd backend
 npm run test       # reglas de negocio (motor de puntos, estados, agenda, canjes)
-npm run test:e2e   # integración contra la base con los datos de demostración
+npm run test:e2e   # integración contra la base: sesión, aislamiento y consumo concurrente
 ```
 
 ## Despliegue

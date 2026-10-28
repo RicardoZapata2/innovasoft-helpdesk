@@ -275,21 +275,32 @@ async function main() {
             : [patron],
         );
 
-    await prisma.perfilPermiso.deleteMany({ where: { perfilId: perfil.id } });
-    await prisma.perfilPermiso.createMany({
-      data: claves.map((clave) => ({ perfilId: perfil.id, permisoId: permisos.get(clave)! })),
-    });
+    // Los permisos de un perfil se cargan solo la primera vez: después los
+    // administra Innovasoft desde la pantalla de perfiles, y volver a correr el
+    // seed no debe deshacer esos cambios. El administrador general es la
+    // excepción, porque siempre debe tener todos los permisos, incluidos los
+    // que se agreguen en versiones nuevas.
+    const asignados = await prisma.perfilPermiso.count({ where: { perfilId: perfil.id } });
+
+    if (asignados === 0 || definicion.permisos.includes('*')) {
+      await prisma.perfilPermiso.createMany({
+        data: claves.map((clave) => ({ perfilId: perfil.id, permisoId: permisos.get(clave)! })),
+        skipDuplicates: true,
+      });
+    }
   }
 
+  // El catálogo comercial se crea si no existe, pero no se sobrescribe: los
+  // precios, puntos y recompensas se administran desde la aplicación.
   for (const plan of PLANES) {
-    await prisma.plan.upsert({ where: { clave: plan.clave }, update: plan, create: plan });
+    await prisma.plan.upsert({ where: { clave: plan.clave }, update: {}, create: plan });
   }
 
   const tarifas = new Map<string, string>();
   for (const tarifa of TARIFAS) {
     const registro = await prisma.tarifaServicio.upsert({
       where: { clave: tarifa.clave },
-      update: tarifa,
+      update: {},
       create: tarifa,
     });
     tarifas.set(tarifa.clave, registro.id);
@@ -341,13 +352,13 @@ async function main() {
   }
 
   for (const regla of REGLAS_FIDELIZACION) {
-    await prisma.reglaFidelizacion.upsert({ where: { clave: regla.clave }, update: regla, create: regla });
+    await prisma.reglaFidelizacion.upsert({ where: { clave: regla.clave }, update: {}, create: regla });
   }
 
   for (const recompensa of RECOMPENSAS) {
     await prisma.recompensa.upsert({
       where: { clave: recompensa.clave },
-      update: recompensa,
+      update: {},
       create: recompensa,
     });
   }

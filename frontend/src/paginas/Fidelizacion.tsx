@@ -11,6 +11,7 @@ import { useSesion } from '../lib/sesion';
 import type { Recompensa, ResumenFidelizacion } from '../lib/tipos';
 
 const COLOR_CANJE = { EMITIDO: 'azul', APLICADO: 'verde', VENCIDO: 'slate' } as const;
+const NOMBRE_CANJE = { EMITIDO: 'Disponible', APLICADO: 'Aplicado', VENCIDO: 'Vencido' } as const;
 
 export function Fidelizacion() {
   const { usuario, puede } = useSesion();
@@ -165,11 +166,24 @@ export function Fidelizacion() {
                         <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{canje.recompensa.nombre}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {fechaCorta(canje.createdAt)} · {canje.usuario.nombres} {canje.usuario.apellidos} ·{' '}
-                          {canje.recompensa.costoPuntos} pts
+                          {Math.abs(canje.movimientos[0]?.puntos ?? canje.recompensa.costoPuntos)} pts
                           {canje.venceEn !== null && canje.estado === 'EMITIDO' && ` · vence ${fechaCorta(canje.venceEn)}`}
                         </p>
+                        {canje.citaCubierta !== null && (
+                          <Link
+                            to={`/citas?cita=${canje.citaCubierta.id}`}
+                            className="text-xs font-medium text-marca-600 hover:underline dark:text-marca-300"
+                          >
+                            Usado en la cita {canje.citaCubierta.codigo}
+                          </Link>
+                        )}
+                        {canje.recompensa.tipo === 'SERVICIO_SIN_CONSUMO' && canje.estado === 'EMITIDO' && (
+                          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                            Disponible: elígelo al agendar una visita presencial en Citas.
+                          </p>
+                        )}
                       </div>
-                      <Etiqueta texto={canje.estado} color={COLOR_CANJE[canje.estado]} />
+                      <Etiqueta texto={NOMBRE_CANJE[canje.estado]} color={COLOR_CANJE[canje.estado]} />
                     </li>
                   ))}
                 </ul>

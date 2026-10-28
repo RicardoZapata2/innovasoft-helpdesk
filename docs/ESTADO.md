@@ -2,18 +2,20 @@
 
 Se actualiza al cerrar cada sesión de trabajo. Leerlo primero al iniciar una nueva.
 
-**Última actualización:** 6 de octubre de 2026 — primera socialización
+**Última actualización:** 27 de octubre de 2026 — preparación de la segunda socialización (los cuatro módulos)
 
 ## Etapas
 
 | # | Etapa | Estado |
 |---|---|---|
 | 1 | Cimientos: repo, base de datos, esquema, autenticación, permisos, sitio público | Terminada |
-| 2 | Motor de puntos (F2): planes, bolsas, consumo, kardex | Terminada (falta cierre de periodo) |
+| 2 | Motor de puntos (F2): planes, bolsas, consumo, kardex, cierre de periodo | Terminada |
 | 3 | Tickets (F1): ciclo de vida, adjuntos, actividades, cierre con descuento | Terminada |
-| 4 | Citas (F3): calendario, disponibilidad, consumo al realizarse | Avanzada (falta vista de calendario y evidencias) |
-| 5 | Fidelización (F4): acumulación, catálogo, canje | Avanzada (falta administración del catálogo) |
-| 6 | Cierre: PDF, filtros, exportación, manual de sustentación | En curso |
+| 4 | Citas (F3): calendario, disponibilidad, evidencias, consumo al realizarse | Terminada |
+| 5 | Fidelización (F4): acumulación, catálogo administrable, canje | Terminada |
+| 6 | Cierre: PDF, filtros, exportación, auditoría, manual de sustentación | Terminada |
+
+Todos los ítems de `COMPROMISOS.md` están marcados y verificados en ejecución.
 
 Funcionalidades presentadas en la primera socialización: **F1 Tickets** y los
 **reportes de puntos y calificación de clientes** (kardex con PDF, encuesta de
@@ -36,18 +38,28 @@ satisfacción, panel de calificación y programa de fidelización).
 - Fidelización: +5 por ticket con evidencia, +10 por encuesta, +50 por renovación
   anticipada; canje con confirmación; descuento aplicado al renovar; recarga
   promocional como bolsa de origen `PROMOCION`
-- Citas: franjas libres por asesor, no solapamiento, estados, consumo al realizarse
+- Citas: calendario mensual, semanal y lista; franjas libres por asesor, no
+  solapamiento, siete estados con confirmación previa, reprogramación con motivo
+  (marca si fue fuera del plazo mínimo), cancelación con motivo, evidencias,
+  vínculo opcional a un ticket, historial de cambios y consumo al realizarse
+- La recompensa "visita sin consumo" se elige al agendar una visita presencial;
+  la cita realizada no descuenta puntos y cancelarla devuelve el beneficio
+- Cierre de periodo de facturación: expira el saldo de bolsas vencidas, cobra el
+  descubierto de las bolsas vigentes y traslada lo que no alcanza
+- Catálogo comercial administrable (planes, tarifas, recompensas, reglas) con
+  registro en la bitácora; el seed ya no sobrescribe esos cambios
+- Visor de la bitácora de auditoría con filtros y datos antes/después
+- Kardex filtrable por ticket; los consumos de citas enlazan a la cita
 - Despliegue en Render (`render.yaml`): un servicio web entrega API y frontend
-- 79 pruebas unitarias y 5 de integración
+- 85 pruebas unitarias y 6 de integración (incluye dos consumos simultáneos
+  sobre la misma bolsa)
 
 ## Siguiente
 
-- Cierre de periodo de facturación (expirar bolsas y consolidar descubierto)
-- Vista de calendario mensual y semanal en citas; evidencias en la cita
-- Administración del catálogo de recompensas y reglas desde la interfaz
-- Visor de la bitácora de auditoría
-- Filtro por ticket en la pantalla del kardex (el backend ya lo soporta)
-- Prueba automatizada de dos cierres simultáneos sobre la misma bolsa
+- Notificaciones por correo real (hoy el enlace y la contraseña temporal se
+  muestran en pantalla o en la consola del backend)
+- Almacenamiento de adjuntos en un servicio de objetos para producción
+- Cierre de periodo automático programado (hoy lo ejecuta Innovasoft desde Consumos)
 
 ## Notas de entorno
 

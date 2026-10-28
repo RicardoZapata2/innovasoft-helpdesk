@@ -87,8 +87,17 @@ primero solo tiene 30, se toman 30 de esa y 20 de la siguiente. Por eso se regis
 movimiento por cada bolsa afectada, no uno por servicio.
 
 **Saldo en descubierto.** Si el total disponible no alcanza, la operación no se bloquea:
-el asesor ya prestó el servicio. El excedente se marca como pendiente y se traslada al
-cierre del siguiente periodo de facturación.
+el asesor ya prestó el servicio. El excedente queda como movimiento `DESCUBIERTO` sin
+bolsa y sin periodo, que es lo que lo marca como pendiente, hasta un tope configurable.
+
+**Cierre de periodo.** Innovasoft cierra el periodo de facturación de cada empresa
+(`puntos/periodos/cerrar`). El cierre, en una sola transacción con las bolsas
+bloqueadas: (1) registra como `EXPIRACION` el saldo que quedó en las bolsas vencidas;
+(2) consolida en el periodo los descubiertos pendientes; (3) cobra ese descubierto de
+las bolsas vigentes, de la que vence antes a la que vence después; y (4) lo que no
+alcanza a cubrirse se traslada al periodo siguiente como un descubierto nuevo. El
+saldo disponible no cambia con el cierre; lo que cambia es de dónde sale cada punto.
+La regla vive en `domain/cierre-periodo.ts` y tiene sus propias pruebas.
 
 **Atomicidad y concurrencia.** Todo el consumo ocurre dentro de una transacción que
 bloquea las filas de las bolsas involucradas con `SELECT ... FOR UPDATE`. Sin ese
@@ -158,7 +167,8 @@ backend/
       tickets/           F1
       puntos/            F2 — planes, bolsas y motor de consumo
       citas/             F3
-      fidelizacion/      F4
+      fidelizacion/      F4, más la administración de recompensas y reglas
+      auditoria/         consulta de la bitácora (solo lectura)
     shared/
       guards/            autenticación y permisos
       seguridad/         aislamiento por empresa, credenciales
