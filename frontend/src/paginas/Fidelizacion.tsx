@@ -124,7 +124,7 @@ export function Fidelizacion() {
               {resumen.data.movimientos.length === 0 ? (
                 <Vacio texto="Aún no hay movimientos. Registra tickets con evidencia y califica la atención." />
               ) : (
-                <Tabla cabeceras={['Fecha', 'Concepto', 'Puntos']}>
+                <Tabla compacta cabeceras={['Fecha', 'Concepto', 'Puntos']}>
                   {resumen.data.movimientos.map((movimiento) => (
                     <tr key={movimiento.id}>
                       <td className="py-2 pr-4 whitespace-nowrap text-slate-600 dark:text-slate-300">

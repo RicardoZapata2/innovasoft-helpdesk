@@ -160,14 +160,22 @@ export function ErrorDelServidor({ error }: { error: unknown }) {
   );
 }
 
-export function Tabla({ cabeceras, children }: { cabeceras: string[]; children: ReactNode }) {
+export function Tabla({
+  cabeceras,
+  children,
+  compacta = false,
+}: {
+  cabeceras: string[];
+  children: ReactNode;
+  compacta?: boolean;
+}) {
   return (
     // En una pantalla de teléfono una tabla de seis columnas no cabe. En lugar
     // de encoger las celdas hasta que no se lean, se le da un ancho mínimo y se
     // desplaza de lado dentro de su propia caja: el resto de la página no se
-    // mueve.
+    // mueve. Las tablas de tres columnas en media pantalla van compactas.
     <div className="-mx-5 overflow-x-auto px-5">
-      <table className="w-full min-w-150 text-sm">
+      <table className={`w-full text-sm ${compacta ? '' : 'min-w-150'}`}>
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
             {cabeceras.map((cabecera) => (
