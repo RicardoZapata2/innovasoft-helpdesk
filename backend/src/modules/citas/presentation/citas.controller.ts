@@ -71,7 +71,7 @@ export class CitasController {
   @RequierePermisos('citas.ver_todas', 'citas.ver_empresa', 'citas.ver_propias')
   @Get(':id')
   obtener(@UsuarioActual() usuario: UsuarioAutenticado, @Param('id', ParseUUIDPipe) id: string) {
-    return this.citas.ficha(id, this.ambito(usuario));
+    return this.citas.ficha(id, usuario, this.ambito(usuario));
   }
 
   // Suben evidencias tanto el cliente (fotos del problema antes de la visita)
@@ -97,7 +97,7 @@ export class CitasController {
     @Param('adjuntoId', ParseUUIDPipe) adjuntoId: string,
     @Res({ passthrough: true }) respuesta: Response,
   ) {
-    const archivo = await this.citas.adjunto(id, adjuntoId, this.ambito(usuario));
+    const archivo = await this.citas.adjunto(id, adjuntoId, usuario, this.ambito(usuario));
 
     respuesta.set({
       'Content-Type': archivo.tipoMime,

@@ -30,7 +30,11 @@ export function Usuarios() {
     queryFn: () => api.get<UsuarioListado[]>(`/usuarios${consulta}`),
   });
 
-  const perfiles = useQuery({ queryKey: ['perfiles'], queryFn: () => api.get<Perfil[]>('/perfiles') });
+  const perfiles = useQuery({
+    queryKey: ['perfiles'],
+    queryFn: () => api.get<Perfil[]>('/perfiles'),
+    enabled: puede('usuarios.crear', 'usuarios.asignar_perfil'),
+  });
 
   const empresas = useQuery({
     queryKey: ['empresas'],

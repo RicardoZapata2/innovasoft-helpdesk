@@ -127,7 +127,7 @@ export function Tickets() {
               </option>
             ))}
           </Seleccion>
-          {esInnovasoft && (
+          {esInnovasoft && puede('empresas.ver_todas') && (
             <SelectorEmpresa
               valor={empresaId}
               onCambio={(valor) => filtrar(() => setEmpresaId(valor))}

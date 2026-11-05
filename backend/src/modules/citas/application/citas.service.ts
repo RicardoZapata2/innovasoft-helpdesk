@@ -216,10 +216,18 @@ export class CitasService {
     return { pagina, tamano, total, paginas: Math.max(1, Math.ceil(total / tamano)), citas };
   }
 
-  async obtener(id: string, empresaId?: string) {
+  async obtener(id: string, usuario: UsuarioAutenticado, empresaId?: string) {
     const cita = await this.prisma.cita.findUnique({ where: { id }, include: this.detalle() });
 
     if (cita === null || (empresaId !== undefined && cita.empresaId !== empresaId)) {
+      throw new NotFoundException('La cita no existe');
+    }
+
+    // Con el permiso "propias" solo se llega a lo que se solicitó o a lo que se
+    // tiene asignado. Se responde 404 para no confirmar que la cita existe.
+    const veTodo = usuario.permisos.includes('citas.ver_todas') || usuario.permisos.includes('citas.ver_empresa');
+
+    if (!veTodo && cita.solicitanteId !== usuario.id && cita.asesor.usuarioId !== usuario.id) {
       throw new NotFoundException('La cita no existe');
     }
 
@@ -229,8 +237,8 @@ export class CitasService {
   // Lo que muestra la ficha de la cita: además de sus datos, las evidencias y
   // la historia de cambios, que sale de la bitácora de auditoría. Así el motivo
   // de cada reprogramación o cancelación queda a la vista sin duplicarlo.
-  async ficha(id: string, empresaId?: string) {
-    const cita = await this.obtener(id, empresaId);
+  async ficha(id: string, usuario: UsuarioAutenticado, empresaId?: string) {
+    const cita = await this.obtener(id, usuario, empresaId);
 
     const [adjuntos, historial] = await Promise.all([
       this.prisma.adjunto.findMany({
@@ -267,7 +275,7 @@ export class CitasService {
       throw new BadRequestException('No se recibió ningún archivo');
     }
 
-    const cita = await this.obtener(id, empresaId);
+    const cita = await this.obtener(id, usuario, empresaId);
 
     if (cita.estado.clave === 'cancelada') {
       throw new ConflictException('No se adjuntan evidencias a una cita cancelada');
@@ -310,11 +318,11 @@ export class CitasService {
       });
     });
 
-    return this.ficha(cita.id, empresaId);
+    return this.ficha(cita.id, usuario, empresaId);
   }
 
-  async adjunto(id: string, adjuntoId: string, empresaId?: string) {
-    const cita = await this.obtener(id, empresaId);
+  async adjunto(id: string, adjuntoId: string, usuario: UsuarioAutenticado, empresaId?: string) {
+    const cita = await this.obtener(id, usuario, empresaId);
     const adjunto = await this.prisma.adjunto.findFirst({ where: { id: adjuntoId, citaId: cita.id } });
     const ruta = adjunto === null ? null : resolve(this.config.getOrThrow<string>('subidas.directorio'), adjunto.ruta);
 
@@ -326,7 +334,7 @@ export class CitasService {
   }
 
   async reprogramar(id: string, datos: ReprogramarCitaDto, usuario: UsuarioAutenticado, empresaId?: string) {
-    const cita = await this.obtener(id, empresaId);
+    const cita = await this.obtener(id, usuario, empresaId);
     const estadoActual = cita.estado.clave as ClaveEstadoCita;
 
     this.verificarTransicion(estadoActual, 'reprogramada', usuario);
@@ -377,7 +385,7 @@ export class CitasService {
     usuario: UsuarioAutenticado,
     empresaId?: string,
   ) {
-    const cita = await this.obtener(id, empresaId);
+    const cita = await this.obtener(id, usuario, empresaId);
     const estadoActual = cita.estado.clave as ClaveEstadoCita;
 
     this.verificarTransicion(estadoActual, destino, usuario);
@@ -387,6 +395,8 @@ export class CitasService {
     }
 
     const estadoDestino = await this.estadoPorClave(destino);
+    const horasMinimas = this.config.getOrThrow<number>('citas.horasMinimasParaCambios');
+    const fueraDePlazo = destino === 'cancelada' && !estaDentroDelPlazo(cita.inicioEn, new Date(), horasMinimas);
 
     const actualizada = await this.prisma.$transaction(async (tx) => {
       await tx.registroAuditoria.create({
@@ -396,7 +406,7 @@ export class CitasService {
           entidadId: cita.id,
           accion: `ESTADO_${destino.toUpperCase()}`,
           datosAnteriores: { estado: estadoActual },
-          datosNuevos: { estado: destino, motivo: datos.motivo ?? null },
+          datosNuevos: { estado: destino, motivo: datos.motivo ?? null, fueraDePlazo },
         },
       });
 
@@ -564,7 +574,7 @@ export class CitasService {
       modalidad: { select: { clave: true, nombre: true } },
       tarifaAplicada: { select: { clave: true, nombre: true, puntos: true } },
       empresa: { select: { id: true, razonSocial: true } },
-      asesor: { select: { id: true, usuario: { select: { nombres: true, apellidos: true, email: true } } } },
+      asesor: { select: { id: true, usuarioId: true, usuario: { select: { nombres: true, apellidos: true, email: true } } } },
       solicitante: { select: { nombres: true, apellidos: true, email: true } },
       ticket: { select: { id: true, codigo: true, titulo: true } },
       cubiertaPorCanje: { select: { id: true, recompensa: { select: { nombre: true } } } },

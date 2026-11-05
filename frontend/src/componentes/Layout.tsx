@@ -141,6 +141,9 @@ export function Layout() {
               {usuario?.nombres} {usuario?.apellidos}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{usuario?.perfil}</p>
+            <Link to="/cambiar-password" className="text-xs text-marca-600 hover:underline dark:text-marca-300">
+              Cambiar contraseña
+            </Link>
           </div>
 
           <Boton
@@ -157,7 +160,10 @@ export function Layout() {
         {menuAbierto && (
           <nav className="border-t border-slate-100 px-4 py-3 md:hidden dark:border-slate-800">
             <p className="px-3 pb-2 text-xs text-slate-500 dark:text-slate-400">
-              {usuario?.nombres} {usuario?.apellidos} · {usuario?.perfil}
+              {usuario?.nombres} {usuario?.apellidos} · {usuario?.perfil} ·{' '}
+              <Link to="/cambiar-password" className="text-marca-600 dark:text-marca-300" onClick={() => setMenuAbierto(false)}>
+                Cambiar contraseña
+              </Link>
             </p>
             <div className="space-y-1">
               {visibles.map((enlace) => (

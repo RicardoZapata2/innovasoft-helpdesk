@@ -19,6 +19,8 @@ const PERFIL_ADMIN_EMPRESA = 'Administrador de empresa cliente';
 
 type Sesion = { accessToken: string; refreshToken: string };
 
+const GRACIA_ROTACION_MS = 30 * 1000;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -158,6 +160,18 @@ export class AuthService {
 
     if (sesion === null) {
       throw new UnauthorizedException('La sesión expiró, vuelve a iniciar sesión');
+    }
+
+    // Recargar la página mientras viaja una renovación deja al navegador con el
+    // token anterior: el servidor ya lo rotó, pero la respuesta nunca llegó. No
+    // es un robo, así que durante unos segundos se le entrega una sesión nueva.
+    const rotadoHacePoco =
+      sesion.reemplazadoPor !== null &&
+      sesion.revocadoEn !== null &&
+      Date.now() - sesion.revocadoEn.getTime() < GRACIA_ROTACION_MS;
+
+    if (rotadoHacePoco && sesion.expiraEn.getTime() >= Date.now()) {
+      return this.emitirSesion(usuarioId);
     }
 
     // Un token que ya fue rotado o revocado y vuelve a aparecer significa que

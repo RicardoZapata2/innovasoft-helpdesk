@@ -45,7 +45,17 @@ export function App() {
       <Route element={<RutaProtegida />}>
         <Route element={<Layout />}>
           <Route path="/panel" element={<Panel />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={['citas.ver_todas', 'citas.ver_empresa', 'citas.ver_propias']} />}>
+        <Route element={<Layout />}>
           <Route path="/citas" element={<Citas />} />
+        </Route>
+      </Route>
+
+      <Route element={<RutaProtegida permisos={['puntos.ver_kardex']} />}>
+        <Route element={<Layout />}>
           <Route path="/kardex" element={<Kardex />} />
         </Route>
       </Route>

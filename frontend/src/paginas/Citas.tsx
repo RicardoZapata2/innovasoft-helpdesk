@@ -223,7 +223,7 @@ export function Citas() {
             </Seleccion>
           </div>
 
-          {esInnovasoft && (
+          {esInnovasoft && puede('empresas.ver_todas') && (
             <div className="min-w-56 flex-1">
               <SelectorEmpresa valor={empresaId} onCambio={setEmpresaId} etiqueta="Empresa (vacío = todas)" />
             </div>
@@ -805,7 +805,7 @@ function describirEvento(
     ESTADO_CONFIRMADA: 'confirmó la cita',
     ESTADO_EN_CURSO: 'inició la visita',
     ESTADO_REALIZADA: 'marcó la cita como realizada',
-    ESTADO_CANCELADA: 'canceló la cita',
+    ESTADO_CANCELADA: nuevos?.fueraDePlazo === true ? 'canceló la cita (fuera del plazo mínimo)' : 'canceló la cita',
     ESTADO_NO_ASISTIDA: 'registró que el cliente no asistió',
   };
 
