@@ -398,7 +398,7 @@ export class CitasService {
     const horasMinimas = this.config.getOrThrow<number>('citas.horasMinimasParaCambios');
     const fueraDePlazo = destino === 'cancelada' && !estaDentroDelPlazo(cita.inicioEn, new Date(), horasMinimas);
 
-    const actualizada = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await tx.registroAuditoria.create({
         data: {
           usuarioId: usuario.id,
@@ -419,7 +419,7 @@ export class CitasService {
         await tx.canje.update({ where: { id: cita.cubiertaPorCanjeId! }, data: { estado: 'EMITIDO' } });
       }
 
-      return tx.cita.update({
+      const actualizada = await tx.cita.update({
         where: { id: cita.id },
         data: {
           estadoId: estadoDestino.id,
@@ -428,22 +428,22 @@ export class CitasService {
         },
         include: this.detalle(),
       });
+
+      // El cambio de estado y el descuento son una sola operación, igual que en
+      // el cierre de un ticket: si la empresa llegó al tope de descubierto, la
+      // cita no queda realizada sin haberse cobrado.
+      if (destino === 'realizada') {
+        const consumo = await this.consumirPorCitaRealizada(tx, actualizada, usuario.id);
+
+        return { ...actualizada, consumo };
+      }
+
+      return actualizada;
     });
-
-    // El consumo ocurre después de cerrar la transacción del cambio de estado y
-    // en la suya propia, porque el motor de puntos necesita bloquear las bolsas
-    // de la empresa y anidar ese bloqueo dentro de otra transacción alargaría el
-    // tiempo que las filas quedan retenidas.
-    if (destino === 'realizada') {
-      const consumo = await this.consumirPorCitaRealizada(actualizada, usuario.id);
-
-      return { ...actualizada, consumo };
-    }
-
-    return actualizada;
   }
 
   private async consumirPorCitaRealizada(
+    tx: ClientePrisma,
     cita: { id: string; codigo: string; empresaId: string; tarifaAplicadaId: string | null; cubiertaPorCanjeId: string | null },
     usuarioId: string,
   ) {
@@ -455,13 +455,13 @@ export class CitasService {
       return { cubiertaPorRecompensa: false, puntos: 0 };
     }
 
-    const tarifa = await this.prisma.tarifaServicio.findUnique({ where: { id: cita.tarifaAplicadaId } });
+    const tarifa = await tx.tarifaServicio.findUnique({ where: { id: cita.tarifaAplicadaId } });
 
     if (tarifa === null || tarifa.puntos <= 0) {
       return { cubiertaPorRecompensa: false, puntos: 0 };
     }
 
-    const resultado = await this.consumo.consumir({
+    const resultado = await this.consumo.consumirEn(tx, {
       empresaId: cita.empresaId,
       costo: tarifa.puntos,
       descripcion: `Cita ${cita.codigo} — ${tarifa.nombre}`,
